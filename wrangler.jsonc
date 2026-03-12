@@ -1,0 +1,14 @@
+{
+	"$schema": "./node_modules/wrangler/config-schema.json",
+	"name": "salon-booking",
+	"compatibility_date": "2026-03-06",
+	"compatibility_flags": ["nodejs_als"],
+	"pages_build_output_dir": ".svelte-kit/cloudflare",
+	"d1_databases": [
+		{
+			"binding": "salon_booking_db",
+			"database_name": "salon-booking-db",
+			"database_id": "696ed09e-40e2-40de-a5c5-53bfe7193872"
+		}
+	]
+}
