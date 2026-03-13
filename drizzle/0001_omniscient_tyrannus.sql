@@ -1,0 +1,1 @@
+ALTER TABLE `appointments` ADD `status` text DEFAULT 'confirmed' NOT NULL;

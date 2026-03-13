@@ -115,6 +115,11 @@
 							>
 							<th
 								scope="col"
+								class="px-6 py-4 text-center text-xs font-semibold tracking-wider text-gray-500 uppercase"
+								>狀態</th
+							>
+							<th
+								scope="col"
 								class="px-6 py-4 text-right text-xs font-semibold tracking-wider text-gray-500 uppercase"
 								>時長</th
 							>
@@ -122,23 +127,23 @@
 					</thead>
 					<tbody class="divide-y divide-gray-50 bg-white">
 						{#each data.records as record}
-							<tr class="group transition-colors duration-150 hover:bg-[#F9F8F6]">
+							<tr class="group transition-colors duration-150 hover:bg-[#F9F8F6] {record.status === 'cancelled' ? 'opacity-60 bg-gray-50/50 grayscale' : ''}">
 								<td class="px-6 py-5 whitespace-nowrap">
 									<div class="flex items-center gap-2">
 										<span
-											class="h-4 w-1 rounded-full bg-[#8F9E91] opacity-0 transition-opacity group-hover:opacity-100"
+											class="h-4 w-1 rounded-full {record.status === 'cancelled' ? 'bg-gray-400' : 'bg-[#8F9E91]'} opacity-0 transition-opacity group-hover:opacity-100"
 										></span>
-										<span class="text-sm font-medium text-gray-900"
+										<span class="text-sm font-medium {record.status === 'cancelled' ? 'text-gray-500 line-through' : 'text-gray-900'}"
 											>{formatDate(record.appointmentDate)}</span
 										>
 									</div>
 								</td>
 								<td class="px-6 py-5 whitespace-nowrap">
 									<div
-										class="inline-flex items-center gap-2 rounded-lg border border-[#34D399]/30 bg-[#ECFDF5] px-3 py-1 text-sm font-medium text-[#064E3B]"
+										class="inline-flex items-center gap-2 rounded-lg border {record.status === 'cancelled' ? 'border-gray-300 bg-gray-100 text-gray-500' : 'border-[#34D399]/30 bg-[#ECFDF5] text-[#064E3B]'} px-3 py-1 text-sm font-medium"
 									>
 										<span>{formatTime(record.appointmentDate)}</span>
-										<span class="font-normal text-gray-400">→</span>
+										<span class="font-normal {record.status === 'cancelled' ? 'text-gray-400' : 'text-emerald-700/50'}">→</span>
 										<span class="opacity-80"
 											>{getEndTime(record.appointmentDate, record.durationMinutes)}</span
 										>
@@ -151,11 +156,22 @@
 										>
 											{record.customerName.charAt(0)}
 										</div>
-										<span class="text-sm font-medium text-gray-900">{record.customerName}</span>
+										<span class="text-sm font-medium {record.status === 'cancelled' ? 'text-gray-500' : 'text-gray-900'}">{record.customerName}</span>
 									</div>
 								</td>
 								<td class="px-6 py-5 whitespace-nowrap">
-									<span class="text-sm text-gray-600">{record.serviceType}</span>
+									<span class="text-sm {record.status === 'cancelled' ? 'text-gray-400' : 'text-gray-600'}">{record.serviceType}</span>
+								</td>
+								<td class="px-6 py-5 text-center whitespace-nowrap">
+									{#if record.status === 'cancelled'}
+										<span class="inline-flex rounded-full bg-rose-50 px-2.5 py-1 text-xs font-medium text-rose-600 border border-rose-100/50">
+											已取消
+										</span>
+									{:else}
+										<span class="inline-flex rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-600 border border-emerald-100/50">
+											已確認
+										</span>
+									{/if}
 								</td>
 								<td class="px-6 py-5 text-right whitespace-nowrap">
 									<span
@@ -167,7 +183,7 @@
 							</tr>
 						{:else}
 							<tr>
-								<td colspan="5" class="px-6 py-12 text-center">
+								<td colspan="6" class="px-6 py-12 text-center">
 									<div class="flex flex-col items-center justify-center space-y-3">
 										<div class="w-12 h-12 bg-gray-50 rounded-full flex items-center justify-center">
 											<svg

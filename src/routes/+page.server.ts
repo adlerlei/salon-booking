@@ -1,6 +1,7 @@
 import { redirect } from '@sveltejs/kit';
 import { initDb } from '$lib/server/db';
 import { appointments } from '$lib/server/db/schema';
+import { eq } from 'drizzle-orm';
 
 // 服務對應的時間（分鐘）
 const serviceDurations: Record<string, number> = {
@@ -18,7 +19,7 @@ const serviceDurations: Record<string, number> = {
 
 export const load = async ({ platform }) => {
 	const db = initDb(platform);
-	const allAppointments = await db.select().from(appointments);
+	const allAppointments = await db.select().from(appointments).where(eq(appointments.status, 'confirmed'));
 	return {
 		appointments: allAppointments
 	};

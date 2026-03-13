@@ -216,6 +216,14 @@
 					</svg>
 					返回 LINE 聊天
 				</button>
+				
+				<!-- 次要按鈕：查看我的預約 -->
+				<a 
+					href="/my-bookings"
+					class="mt-1 flex w-full items-center justify-center rounded-2xl bg-white px-6 py-4 font-semibold text-[#8F9E91] border border-[#8F9E91]/20 transition-all duration-200 active:scale-[0.97] hover:bg-[#8F9E91]/5"
+				>
+					查看我的預約
+				</a>
 			</div>
 		{/if}
 	</div>
