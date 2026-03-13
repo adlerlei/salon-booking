@@ -38,7 +38,7 @@ npm run build
 | 路徑 | 說明 |
 |---|---|
 | `/` | 預約主頁面（三步驟：選服務 → 選日期 → 選時段） |
-| `/booking-success` | 預約成功頁（🚧 開發中） |
+| `/booking-success` | 預約成功頁（✅ 已完成） |
 | `/my-bookings` | 個人預約列表 + 取消功能（📋 規劃中） |
 | `/admin` | 管理後台（查看所有預約） |
 
@@ -53,16 +53,12 @@ npm run build
 - 即時時段衝突檢查（本地計算，不撈資料庫）
 - 預約資料寫入 Cloudflare D1
 - Admin 後台查看所有預約（每 30 秒自動更新）
-
----
-
-### 🚧 執行中
-
-- **預約成功頁面 `/booking-success`**
-  - 預約完成後立即跳轉（redirect from server），不再停留在時間選擇頁
-  - 顯示預約摘要（服務、日期、時段）
+- **預約成功頁面 `/booking-success`** ✅
+  - 預約完成後立即跳轉（server redirect 303），不再停留在時間選擇頁
+  - 顯示預約摘要（顧客、服務、日期、時段）
   - 溫馨提醒文案（告知如需更改請聯繫沙龍）
-  - 「返回 LINE 聊天」按鈕（呼叫 `liff.closeWindow()` 關閉 LIFF，回到官方帳號對話視窗）
+  - 「返回 LINE 聊天」按鈕（`liff.closeWindow()` 關閉 LIFF，回到官方帳號對話視窗）
+  - 確認預約按鈕有 loading 動畫防止重複點擊
   - 全手機優化設計
 
 ---
@@ -161,7 +157,7 @@ npm run build
 #### 第 4 步：部署到 Cloudflare Pages
 
 ```sh
-wrangler pages deploy .svelte-kit/cloudflare --project-name salon-booking
+wrangler pages deploy .svelte-kit/cloudflare --project-name salon-booking --branch salon-booking
 ```
 
 > 首次執行會提示建立新 Pages 專案，依指示完成即可。
@@ -174,9 +170,13 @@ wrangler pages deploy .svelte-kit/cloudflare --project-name salon-booking
 # 1. 建置
 npm run build
 
-# 2. 部署
-wrangler pages deploy .svelte-kit/cloudflare --project-name salon-booking
+# 2. 部署到生產環境
+wrangler pages deploy .svelte-kit/cloudflare --project-name salon-booking --branch salon-booking
 ```
+
+> ⚠️ **重要**：必須加 `--branch salon-booking` 才會部署到**生產環境**。
+> 若省略此參數，wrangler 會偵測 git branch（如 `main`），部署到**預覽環境**，
+> 正式網域 `salon-booking-a01.pages.dev` 不會更新。
 
 ---
 

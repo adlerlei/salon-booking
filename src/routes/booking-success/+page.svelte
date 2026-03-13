@@ -48,26 +48,42 @@
 	let showContent = false;
 	let showButtons = false;
 
-	onMount(() => {
+	// LIFF 實例
+	let liff: any = null;
+
+	onMount(async () => {
 		// 依序播放動畫
 		setTimeout(() => (showCheck = true), 100);
 		setTimeout(() => (showContent = true), 400);
 		setTimeout(() => (showButtons = true), 700);
+
+		// 初始化 LIFF（必須先 init 才能呼叫 closeWindow）
+		try {
+			const liffModule = await import('@line/liff');
+			liff = liffModule.default;
+			await liff.init({ liffId: '2009342816-q0rukZhq' });
+		} catch {
+			// 初始化失敗時 liff 保持 null，按鈕會 fallback
+		}
 	});
 
 	// 返回 LINE 聊天室
-	const backToLine = async () => {
+	const backToLine = () => {
 		try {
-			const liffModule = await import('@line/liff');
-			const liff = liffModule.default;
-			// 如果已在 LIFF 環境中，直接關閉視窗回到 LINE
-			if (liff.isInClient()) {
+			if (liff) {
+				// 直接嘗試呼叫 closeWindow，不要依賴 isInClient() 
+				// 因為伺服器 303 redirect 可能會讓 isInClient 誤判為 false
 				liff.closeWindow();
-			} else {
-				// 開發環境或瀏覽器中，導回首頁
-				window.location.href = '/';
 			}
-		} catch {
+			// 備案：原生的關閉視窗方法（對 Webview 通常有效）
+			setTimeout(() => {
+				window.close();
+				// 如果 500ms 後視窗還沒關閉，才導回首頁
+				setTimeout(() => {
+					window.location.href = '/';
+				}, 500);
+			}, 100);
+		} catch (e: any) {
 			window.location.href = '/';
 		}
 	};
