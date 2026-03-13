@@ -109,6 +109,117 @@ npm run build
 
 ---
 
+## 部署到 Cloudflare
+
+### 前置需求
+
+- Cloudflare 帳號（免費方案即可）
+- 安裝並登入 Wrangler CLI：
+
+```sh
+# 全域安裝（若尚未安裝）
+npm install -g wrangler
+
+# 登入 Cloudflare 帳號
+wrangler login
+```
+
+---
+
+### 首次部署流程
+
+#### 第 1 步：建立 D1 資料庫
+
+```sh
+# 在 Cloudflare 建立 D1 資料庫
+wrangler d1 create salon-booking-db
+```
+
+> 執行後會輸出 `database_id`，複製貼到 `wrangler.jsonc` 的 `database_id` 欄位。
+
+#### 第 2 步：初始化遠端資料庫結構（Migrate）
+
+```sh
+# 產生 migration 檔案（若尚未產生）
+npm run db:generate
+
+# 推送 schema 到本地測試資料庫
+npm run db:push
+
+# 套用到 Cloudflare D1 遠端資料庫
+wrangler d1 migrations apply salon-booking-db --remote
+```
+
+#### 第 3 步：建置專案
+
+```sh
+npm run build
+```
+
+> 輸出目錄為 `.svelte-kit/cloudflare`（已設定在 `wrangler.jsonc`）
+
+#### 第 4 步：部署到 Cloudflare Pages
+
+```sh
+wrangler pages deploy .svelte-kit/cloudflare --project-name salon-booking
+```
+
+> 首次執行會提示建立新 Pages 專案，依指示完成即可。
+
+---
+
+### 日常部署（更新程式碼後）
+
+```sh
+# 1. 建置
+npm run build
+
+# 2. 部署
+wrangler pages deploy .svelte-kit/cloudflare --project-name salon-booking
+```
+
+---
+
+### 本地預覽 Cloudflare 環境（含 D1 綁定）
+
+```sh
+# 先建置，再用 wrangler 模擬 Cloudflare 執行環境
+npm run build
+npm run preview
+# 等同於：wrangler pages dev .svelte-kit/cloudflare --port 4173
+```
+
+> `npm run dev` 是一般 Vite 開發伺服器，不包含 D1 綁定，適合 UI 開發。  
+> `npm run preview` 才會綁定 D1，用於完整功能測試。
+
+---
+
+### DB Schema 有異動時
+
+```sh
+# 產生新的 migration 檔案
+npm run db:generate
+
+# 套用到遠端 Cloudflare D1
+wrangler d1 migrations apply salon-booking-db --remote
+```
+
+---
+
+### 環境說明
+
+| 指令 | 用途 |
+|---|---|
+| `npm run dev` | 本地開發（Vite，無 D1 綁定）|
+| `npm run build` | 建置 Cloudflare Pages 產物 |
+| `npm run preview` | 本地模擬 Cloudflare 環境（含 D1）|
+| `wrangler pages deploy ...` | 部署至 Cloudflare Pages |
+| `npm run db:generate` | 產生 Drizzle migration 檔案 |
+| `npm run db:push` | 推送 schema 到本地 SQLite |
+| `wrangler d1 migrations apply ... --remote` | 套用 migration 到遠端 D1 |
+
+---
+
 ## 重新建立此專案
 
 ```sh
@@ -118,3 +229,4 @@ npx sv@0.12.5 create --template minimal --types ts \
   drizzle="database:sqlite+sqlite:better-sqlite3" \
   --install npm salon-booking
 ```
+

@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { enhance } from '$app/forms';
 	import { fade, slide } from 'svelte/transition';
 	import type { PageData } from './$types';
 
@@ -8,6 +7,11 @@
 
 	let profile: any = null;
 	let error = '';
+	let isSubmitting = false;
+
+	const handleSubmit = () => {
+		isSubmitting = true;
+	};
 
 	onMount(async () => {
 		try {
@@ -162,7 +166,11 @@
 			</div>
 		{:else}
 
-			<form method="POST" use:enhance class="space-y-8">
+			<form
+				method="POST"
+				on:submit={handleSubmit}
+				class="space-y-8"
+			>
 				<input type="hidden" name="lineUserId" value={profile.userId} />
 				<input type="hidden" name="customerName" value={profile.displayName} />
 				<input type="hidden" name="serviceType" value={selectedService?.name || ''} />
@@ -380,10 +388,15 @@
 							>
 							<button
 								type="submit"
-								disabled={!selectedTime}
-								class="ml-4 flex flex-1 justify-center rounded-xl bg-[#8F9E91] px-8 py-3 font-medium text-white shadow-md transition-all hover:bg-[#7A8A7C] hover:shadow-lg disabled:cursor-not-allowed disabled:opacity-50"
+								disabled={!selectedTime || isSubmitting}
+								class="ml-4 flex flex-1 items-center justify-center gap-2 rounded-xl bg-[#8F9E91] px-8 py-3 font-medium text-white shadow-md transition-all hover:bg-[#7A8A7C] hover:shadow-lg disabled:cursor-not-allowed disabled:opacity-50"
 							>
-								確認預約
+								{#if isSubmitting}
+									<div class="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"></div>
+									預約中...
+								{:else}
+									確認預約
+								{/if}
 							</button>
 						</div>
 						<!-- Spacer for fixed bottom bar -->
