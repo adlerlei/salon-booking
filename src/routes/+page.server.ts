@@ -1,3 +1,4 @@
+import { redirect } from '@sveltejs/kit';
 import { initDb } from '$lib/server/db';
 import { appointments } from '$lib/server/db/schema';
 
@@ -43,6 +44,13 @@ export const actions = {
 			createdAt: new Date()
 		});
 
-		return { success: true };
+		// 導向成功頁面，傳遞預約資訊作為 query params
+		const params = new URLSearchParams({
+			service: serviceType,
+			date: appointmentDate,
+			name: customerName,
+			duration: String(durationMinutes)
+		});
+		redirect(303, `/booking-success?${params.toString()}`);
 	}
 };

@@ -5,7 +5,6 @@
 	import type { PageData } from './$types';
 
 	export let data: PageData;
-	export let form;
 
 	let profile: any = null;
 	let error = '';
@@ -162,27 +161,6 @@
 				<p>LINE 登入載入中...</p>
 			</div>
 		{:else}
-			{#if form?.success}
-				<div
-					class="mb-8 rounded-2xl border border-[#34D399] bg-[#ECFDF5] p-6 text-center text-[#064E3B] shadow-sm"
-					in:fade
-				>
-					<div
-						class="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-[#10B981] text-white"
-					>
-						<svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"
-							><path
-								stroke-linecap="round"
-								stroke-linejoin="round"
-								stroke-width="2"
-								d="M5 13l4 4L19 7"
-							></path></svg
-						>
-					</div>
-					<h2 class="mb-1 text-xl font-bold">預約成功！</h2>
-					<p class="text-sm opacity-90">我們期待為您服務。</p>
-				</div>
-			{/if}
 
 			<form method="POST" use:enhance class="space-y-8">
 				<input type="hidden" name="lineUserId" value={profile.userId} />
