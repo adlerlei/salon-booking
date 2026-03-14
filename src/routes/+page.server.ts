@@ -1,4 +1,3 @@
-import { redirect } from '@sveltejs/kit';
 import { initDb } from '$lib/server/db';
 import { appointments } from '$lib/server/db/schema';
 import { eq } from 'drizzle-orm';
@@ -45,13 +44,14 @@ export const actions = {
 			createdAt: new Date()
 		});
 
-		// 導向成功頁面，傳遞預約資訊作為 query params
-		const params = new URLSearchParams({
+		// 回傳成功資料給前端，由前端用 goto() 做客戶端導航
+		// 這樣可以保留 LIFF 的瀏覽器上下文，讓 liff.closeWindow() 正常運作
+		return {
+			success: true,
 			service: serviceType,
 			date: appointmentDate,
 			name: customerName,
 			duration: String(durationMinutes)
-		});
-		redirect(303, `/booking-success?${params.toString()}`);
+		};
 	}
 };

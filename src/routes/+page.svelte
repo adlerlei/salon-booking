@@ -1,5 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { enhance } from '$app/forms';
+	import { goto } from '$app/navigation';
 	import { fade, slide } from 'svelte/transition';
 	import type { PageData } from './$types';
 
@@ -9,8 +11,25 @@
 	let error = '';
 	let isSubmitting = false;
 
-	const handleSubmit = () => {
+	// 表單送出後用 goto 客戶端導航，保留 LIFF 上下文
+	const handleEnhance = () => {
 		isSubmitting = true;
+		return async ({ result }: { result: any }) => {
+			if (result.type === 'success' && result.data?.success) {
+				const d = result.data;
+				const params = new URLSearchParams({
+					service: d.service,
+					date: d.date,
+					name: d.name,
+					duration: d.duration
+				});
+				// 用 goto 做客戶端導航，不會重新載入整個頁面
+				// 這樣 LIFF 的瀏覽器上下文才不會斷掉
+				await goto(`/booking-success?${params.toString()}`);
+			} else {
+				isSubmitting = false;
+			}
+		};
 	};
 
 	onMount(async () => {
@@ -168,7 +187,7 @@
 
 			<form
 				method="POST"
-				on:submit={handleSubmit}
+				use:enhance={handleEnhance}
 				class="space-y-8"
 			>
 				<input type="hidden" name="lineUserId" value={profile.userId} />
