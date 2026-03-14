@@ -40,7 +40,18 @@ npm run build
 | `/` | 預約主頁面（三步驟：選服務 → 選日期 → 選時段） |
 | `/booking-success` | 預約成功頁（✅ 已完成） |
 | `/my-bookings` | 個人預約列表 + 取消功能（✅ 已完成） |
-| `/admin` | 管理後台（查看所有預約） |
+| `/admin` | 管理後台（✅ 需要 LINE 登入權限） |
+
+---
+
+## 🔗 重要網址與整合設定
+
+- **顧客專屬預約網址 (綁定於 LINE 圖文選單)**:
+  `https://liff.line.me/2009342816-q0rukZhq/`
+- **顧客個人預約紀錄網址 (綁定於 LINE 圖文選單)**:
+  `https://liff.line.me/2009342816-q0rukZhq/my-bookings`
+- **管理員專屬後台 (需加入權限白名單)**:
+  `https://salon-booking-a01.pages.dev/admin`
 
 ---
 
@@ -71,6 +82,13 @@ npm run build
   - 智慧排序（即將到來：最快到期排最前 / 歷史紀錄：最近操作排最前）
   - 頂端新增數據統計卡片（三區塊總數）
   - 全面 RWD 響應式設計
+- **資訊安全與驗證機制 (Security & Access)** ✅
+  - `/admin` 頁面強制進行 LINE 登入
+  - 實作伺服器端白名單驗證（驗證 `lineUserId`）
+  - 無權限者會看到「存取被拒」錯誤畫面，保護顧客個資
+- **LINE 圖文選單無縫整合** ✅
+  - 使用專屬 `liff.line.me` 網址綁定圖文選單，實現免手動登入、自動身份識別的絲滑體驗
+
 ---
 
 ### 📋 規劃中（近期）
@@ -115,6 +133,26 @@ npm run build
 - 所有頁面皆附掛於 LINE 官方帳號（LIFF），設計需以手機為主要裝置
 - `liff.closeWindow()` → 關閉 LIFF 視窗，回到 LINE 對話視窗
 - Admin 後台目前無身份驗證，不應對外公開 URL
+
+---
+
+## 🛡️ 如何新增管理員 (Admin 白名單)
+
+因為 `/admin` 頁面有白名單保護，所以要讓其他店員或設計師進入後台，必須透過以下資料庫指令來新增管理員。
+
+### 步驟 1：取得新管理員的 LINE ID
+請新管理員先透過 `https://liff.line.me/...` 首頁**完成一次隨意的預約**。然後執行以下指令查看最近預約的客人的 `userId`：
+```sh
+npx wrangler d1 execute salon-booking-db --remote --command="SELECT line_user_id, customer_name FROM appointments ORDER BY created_at DESC LIMIT 5;"
+```
+*(通常為 `U` 開頭的一長串字串)*
+
+### 步驟 2：將新管理員加入白名單
+拿到他的 `userId` 後，執行以下指令將其寫入 `admins` 資料表（請替換掉指令中的 ID 跟名字）：
+```sh
+npx wrangler d1 execute salon-booking-db --remote --command="INSERT INTO admins (line_user_id, name, created_at) VALUES ('請換成他的ID', '請換成他的名字', strftime('%s', 'now') * 1000);"
+```
+加入成功後，他點擊 `/admin` 網域就能順利進入後台了！
 
 ---
 

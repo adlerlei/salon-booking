@@ -1,16 +1,50 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
-	import { invalidateAll } from '$app/navigation';
 	import { fade, slide } from 'svelte/transition';
 
-	export let data: any;
-
 	let interval: any;
+	let profile: any = null;
+	let records: any[] = [];
+	let loading = true;
+	let error = '';
 
-	onMount(() => {
-		interval = setInterval(() => {
-			invalidateAll();
-		}, 30000);
+	const fetchBookings = async () => {
+		if (!profile?.userId) return;
+		try {
+			const res = await fetch(`/api/admin/bookings?userId=${profile.userId}`);
+			const data = (await res.json()) as { records: any[]; message?: string };
+			if (res.ok) {
+				records = data.records;
+			} else {
+				error = data.message || '沒有訪問權限';
+			}
+		} catch (err: any) {
+			error = '無法連線到伺服器';
+		}
+	};
+
+	onMount(async () => {
+		try {
+			const liffModule = await import('@line/liff');
+			const liff = liffModule.default;
+
+			await liff.init({ liffId: '2009342816-q0rukZhq' }); // 使用同一個 LIFF ID
+			if (liff.isLoggedIn()) {
+				profile = await liff.getProfile();
+				await fetchBookings();
+				
+				// 只在成功載入後才開啟自動更新
+				if (!error) {
+					interval = setInterval(fetchBookings, 30000);
+				}
+			} else {
+				liff.login();
+			}
+		} catch (err: any) {
+			error = err.message;
+		} finally {
+			loading = false;
+		}
 	});
 
 	onDestroy(() => {
@@ -55,15 +89,15 @@
 	};
 
 	// 分類與排序
-	$: upcomingBookings = data.records
+	$: upcomingBookings = records
 		.filter((r: any) => !isPast(r.appointmentDate) && r.status === 'confirmed')
 		.sort((a: any, b: any) => a.appointmentDate.localeCompare(b.appointmentDate));
 
-	$: cancelledBookings = data.records
+	$: cancelledBookings = records
 		.filter((r: any) => r.status === 'cancelled')
 		.sort((a: any, b: any) => b.appointmentDate.localeCompare(a.appointmentDate));
 
-	$: pastBookings = data.records
+	$: pastBookings = records
 		.filter((r: any) => isPast(r.appointmentDate) && r.status === 'confirmed')
 		.sort((a: any, b: any) => b.appointmentDate.localeCompare(a.appointmentDate));
 </script>
@@ -79,13 +113,13 @@
 			<div
 				class="flex h-10 w-10 items-center justify-center rounded-xl bg-[#8F9E91] font-serif text-white shadow-sm"
 			>
-				S
+				五
 			</div>
 			<h1
 				class="font-serif text-xl font-semibold tracking-wide"
 				style="font-family: 'Playfair Display', serif;"
 			>
-				Salon Admin
+				五十郎 檔案室
 			</h1>
 		</div>
 
@@ -96,7 +130,24 @@
 	</header>
 
 	<main class="mx-auto mt-6 max-w-5xl px-4 md:px-6">
-		<!-- 數據統計卡片 -->
+		{#if loading}
+			<div class="flex flex-col items-center justify-center py-20 text-gray-400">
+				<div class="mb-4 h-8 w-8 animate-spin rounded-full border-3 border-[#8F9E91] border-t-transparent"></div>
+				<p class="text-sm font-medium tracking-wide">驗證身分與讀取資料中...</p>
+			</div>
+		{:else if error}
+			<div class="flex flex-col items-center justify-center py-24 text-gray-400" in:fade>
+				<div class="mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-red-50">
+					<svg class="h-10 w-10 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+						<path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+					</svg>
+				</div>
+				<h2 class="text-xl font-bold text-gray-800 mb-2">存取被拒</h2>
+				<p class="text-base font-medium text-gray-500 mb-6 max-w-xs text-center">您的 LINE 帳號沒有權限訪問管理員後台，或者伺服器發生錯誤。</p>
+				<p class="text-xs text-gray-400 font-mono">ID: {profile?.userId || 'Unknown'}</p>
+			</div>
+		{:else}
+			<!-- 數據統計卡片 -->
 		<div class="mb-8 grid grid-cols-3 gap-3">
 			<div class="rounded-xl border border-gray-100 bg-white p-4 shadow-sm text-center">
 				<p class="text-xs text-gray-500 mb-1">即將到來</p>
@@ -266,7 +317,7 @@
 		{/if}
 
 		<!-- 空白狀態 -->
-		{#if data.records.length === 0}
+		{#if records.length === 0}
 			<div class="flex flex-col items-center justify-center py-20 text-gray-400" in:fade>
 				<div class="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-gray-100">
 					<svg class="h-8 w-8 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
@@ -275,6 +326,7 @@
 				</div>
 				<p class="text-base font-medium">目前沒有任何預約紀錄</p>
 			</div>
+		{/if}
 		{/if}
 	</main>
 </div>

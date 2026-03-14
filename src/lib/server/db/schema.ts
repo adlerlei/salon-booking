@@ -12,3 +12,11 @@ export const appointments = sqliteTable('appointments', {
 	status: text('status', { enum: ['confirmed', 'cancelled'] }).notNull().default('confirmed'),
 	createdAt: integer('created_at', { mode: 'timestamp' }).$defaultFn(() => new Date())
 });
+
+export const admins = sqliteTable('admins', {
+	lineUserId: text('line_user_id').primaryKey(), // LINE User ID 為主鍵
+	name: text('name').notNull(), // 管理員名稱或備註
+	createdAt: integer('created_at', { mode: 'timestamp' })
+		.notNull()
+		.$defaultFn(() => new Date())
+});

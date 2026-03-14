@@ -57,7 +57,7 @@
 </script>
 
 <svelte:head>
-	<title>預約成功 — Salon Booking</title>
+	<title>預約成功 — 五十郎 專屬預約</title>
 </svelte:head>
 
 <div

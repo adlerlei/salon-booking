@@ -153,7 +153,7 @@
 			class="font-serif text-2xl font-semibold tracking-wide"
 			style="font-family: 'Playfair Display', serif;"
 		>
-			Salon Booking
+			五十郎 專屬預約
 		</h1>
 
 		{#if profile}
