@@ -9,7 +9,10 @@
 	let error = '';
 
 	const fetchBookings = async () => {
-		if (!profile?.userId) return;
+		if (!profile?.userId) {
+			error = '無法取得 LINE 使用者 ID，請確認授權。';
+			return;
+		}
 		try {
 			const res = await fetch(`/api/admin/bookings?userId=${profile.userId}`);
 			const data = (await res.json()) as { records: any[]; message?: string };
@@ -38,10 +41,20 @@
 					interval = setInterval(fetchBookings, 30000);
 				}
 			} else {
-				liff.login();
+				liff.login({ redirectUri: window.location.href });
 			}
 		} catch (err: any) {
 			error = err.message;
+			// 處理 Token 過期的情況，自動清除並重新登入
+			if (error.toLowerCase().includes('expired')) {
+				try {
+					const liffModule = await import('@line/liff');
+					liffModule.default.logout();
+					liffModule.default.login({ redirectUri: window.location.href });
+				} catch (e) {
+					// 忽略 logout/login 時的錯誤
+				}
+			}
 		} finally {
 			loading = false;
 		}
@@ -143,8 +156,10 @@
 					</svg>
 				</div>
 				<h2 class="text-xl font-bold text-gray-800 mb-2">存取被拒</h2>
-				<p class="text-base font-medium text-gray-500 mb-6 max-w-xs text-center">您的 LINE 帳號沒有權限訪問管理員後台，或者伺服器發生錯誤。</p>
-				<p class="text-xs text-gray-400 font-mono">ID: {profile?.userId || 'Unknown'}</p>
+				<p class="text-base font-medium text-gray-500 mb-6 max-w-xs text-center">{error}</p>
+				<div class="rounded bg-gray-100 px-3 py-2">
+					<p class="text-sm text-gray-600 font-mono select-all">ID: {profile?.userId || 'Unknown'}</p>
+				</div>
 			</div>
 		{:else}
 			<!-- 數據統計卡片 -->
