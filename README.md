@@ -65,7 +65,7 @@ npm run build
 - 預約資料寫入 Cloudflare D1
 - Admin 後台查看所有預約（每 30 秒自動更新）
 - **預約成功頁面 `/booking-success`** ✅
-  - 預約完成後立即跳轉（server redirect 303），不再停留在時間選擇頁
+  - 預約完成後立即跳轉（前端 `goto()` 導頁），不再停留在時間選擇頁
   - 顯示預約摘要（顧客、服務、日期、時段）
   - 溫馨提醒文案（告知如需更改請聯繫沙龍）
   - 「返回 LINE 聊天」按鈕（`liff.closeWindow()` 關閉 LIFF，回到官方帳號對話視窗）
