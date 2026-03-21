@@ -154,21 +154,69 @@ Cloudflare Pages / Workers 也要同步設定以上變數。
 
 ## 🛡️ 如何新增管理員 (Admin 白名單)
 
-因為 `/admin` 頁面有白名單保護，所以要讓其他店員或設計師進入後台，必須透過以下資料庫指令來新增管理員。
+因為 `/admin` 頁面有白名單保護，所以要讓店家本人、店員或設計師進入後台，必須先把他的 LINE `userId` 加進 `admins` 資料表。
+
+最簡單的做法就是：
+
+1. 先請對方用自己的 LINE 打開預約頁
+2. 隨便完成一次測試預約
+3. 你去資料庫查出他的 `line_user_id`
+4. 把這個 `line_user_id` 寫進 `admins`
+5. 他之後再用自己的 LINE 打開 `/admin`，就能進入後台
 
 ### 步驟 1：取得新管理員的 LINE ID
-請新管理員先透過 `https://liff.line.me/...` 首頁**完成一次隨意的預約**。然後執行以下指令查看最近預約的客人的 `userId`：
+請新管理員先透過 LINE LIFF 預約頁，用自己的 LINE 帳號**完成一次隨意的測試預約**。
+
+接著執行以下指令，查看最近預約名單，找出他的 `line_user_id`：
+
 ```sh
-npx wrangler d1 execute salon-booking-db --remote --command="SELECT line_user_id, customer_name FROM appointments ORDER BY created_at DESC LIMIT 5;"
+npx wrangler d1 execute salon-booking-db --remote --command="SELECT line_user_id, customer_name, appointment_date FROM appointments ORDER BY created_at DESC LIMIT 10;"
 ```
-*(通常為 `U` 開頭的一長串字串)*
+
+你會看到最近幾筆預約資料：
+- `customer_name`：顧客名稱
+- `appointment_date`：預約時間
+- `line_user_id`：LINE 使用者 ID
+
+找到店家本人那一筆，把 `line_user_id` 複製下來。
+
+> `line_user_id` 通常會是 `U` 開頭的一長串字串。
 
 ### 步驟 2：將新管理員加入白名單
-拿到他的 `userId` 後，執行以下指令將其寫入 `admins` 資料表（請替換掉指令中的 ID 跟名字）：
+拿到他的 `line_user_id` 後，執行以下指令把他加入 `admins` 資料表：
+
 ```sh
-npx wrangler d1 execute salon-booking-db --remote --command="INSERT INTO admins (line_user_id, name, created_at) VALUES ('請換成他的ID', '請換成他的名字', strftime('%s', 'now') * 1000);"
+npx wrangler d1 execute salon-booking-db --remote --command="INSERT INTO admins (line_user_id, name, created_at) VALUES ('請換成店家的LINE_USER_ID', '請換成店家名字', strftime('%s', 'now') * 1000);"
 ```
-加入成功後，他點擊 `/admin` 網域就能順利進入後台了！
+
+例如：
+
+```sh
+npx wrangler d1 execute salon-booking-db --remote --command="INSERT INTO admins (line_user_id, name, created_at) VALUES ('Uxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx', '王小姐', strftime('%s', 'now') * 1000);"
+```
+
+### 步驟 3：確認有沒有加入成功
+
+你可以再查一次目前管理員名單：
+
+```sh
+npx wrangler d1 execute salon-booking-db --remote --command="SELECT line_user_id, name, created_at FROM admins ORDER BY created_at DESC;"
+```
+
+如果店家的 `line_user_id` 已經在裡面，就代表白名單加入成功。
+
+### 步驟 4：請店家重新打開 `/admin`
+
+加入成功後，請店家：
+
+1. 用自己的 LINE 帳號
+2. 重新打開 LIFF 或 `/admin`
+3. 系統就會自動辨識他是管理員並讓他進入後台
+
+如果還是進不去，優先檢查：
+- 他是不是用同一個 LINE 帳號在測試
+- 你加入的 `line_user_id` 有沒有貼錯
+- 是否有多個測試帳號混在一起
 
 ---
 
