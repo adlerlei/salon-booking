@@ -8,7 +8,7 @@
 	export let data: PageData;
 
 	let profile: any = null;
-	let idToken = '';
+	let accessToken = '';
 	let error = '';
 	let isSubmitting = false;
 
@@ -43,7 +43,7 @@
 			await liff.init({ liffId: '2009342816-q0rukZhq' });
 			if (liff.isLoggedIn()) {
 				profile = await liff.getProfile();
-				idToken = liff.getIDToken() || '';
+				accessToken = liff.getAccessToken() || '';
 			} else {
 				liff.login();
 			}
@@ -221,7 +221,7 @@
 				use:enhance={handleEnhance}
 				class="space-y-8"
 			>
-				<input type="hidden" name="idToken" value={idToken} />
+				<input type="hidden" name="accessToken" value={accessToken} />
 				<input type="hidden" name="serviceType" value={selectedService?.name || ''} />
 				<input type="hidden" name="appointmentDate" value="{selectedDate}T{selectedTime}" />
 
@@ -437,7 +437,7 @@
 							>
 							<button
 								type="submit"
-								disabled={!selectedTime || !idToken || isSubmitting}
+								disabled={!selectedTime || !accessToken || isSubmitting}
 								class="ml-4 flex flex-1 items-center justify-center gap-2 rounded-xl bg-[#8F9E91] px-8 py-3 font-medium text-white shadow-md transition-all hover:bg-[#7A8A7C] hover:shadow-lg disabled:cursor-not-allowed disabled:opacity-50"
 							>
 								{#if isSubmitting}

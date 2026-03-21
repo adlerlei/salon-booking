@@ -2,18 +2,18 @@ import { json } from '@sveltejs/kit';
 import {
 	createUserSession,
 	userSessionCookieName,
-	verifyLineIdToken
+	verifyLineAccessToken
 } from '$lib/server/auth/line';
 
 export async function POST({ request, cookies, platform }) {
-	const { idToken } = (await request.json()) as { idToken?: string };
+	const { accessToken } = (await request.json()) as { accessToken?: string };
 
-	if (!idToken) {
-		return json({ success: false, message: 'Missing LINE idToken' }, { status: 400 });
+	if (!accessToken) {
+		return json({ success: false, message: 'Missing LINE access token' }, { status: 400 });
 	}
 
 	try {
-		const profile = await verifyLineIdToken(idToken, platform?.env);
+		const profile = await verifyLineAccessToken(accessToken);
 		const sessionValue = await createUserSession(profile.sub, platform?.env);
 
 		cookies.set(userSessionCookieName, sessionValue, {

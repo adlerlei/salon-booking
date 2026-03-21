@@ -1,7 +1,7 @@
 import { initDb } from '$lib/server/db';
 import { appointments } from '$lib/server/db/schema';
 import { eq } from 'drizzle-orm';
-import { verifyLineIdToken } from '$lib/server/auth/line';
+import { verifyLineAccessToken } from '$lib/server/auth/line';
 
 // 服務對應的時間（分鐘）
 const serviceDurations: Record<string, number> = {
@@ -58,18 +58,18 @@ export const actions = {
 	default: async ({ request, platform }) => {
 		try {
 			const data = await request.formData();
-			const idToken = data.get('idToken') as string;
+			const accessToken = data.get('accessToken') as string;
 			const serviceType = data.get('serviceType') as string;
 			const appointmentDate = data.get('appointmentDate') as string;
 
-			if (!idToken) {
+			if (!accessToken) {
 				return {
 					success: false,
 					message: '缺少 LINE 驗證資訊'
 				};
 			}
 
-			const profile = await verifyLineIdToken(idToken, platform?.env);
+			const profile = await verifyLineAccessToken(accessToken);
 			const durationMinutes = serviceDurations[serviceType] || 60; // 預設 60 分鐘防呆
 			const db = initDb(platform);
 			const nowInTaipei = toTaipeiNowString();

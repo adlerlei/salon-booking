@@ -2,7 +2,6 @@
 // for information about these interfaces
 declare global {
 	interface Env {
-		LINE_CHANNEL_ID?: string;
 		LINE_SESSION_SECRET?: string;
 	}
 

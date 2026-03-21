@@ -1,6 +1,6 @@
 const USER_SESSION_COOKIE = 'salon_user_session';
 
-type VerifyLineIdTokenResult = {
+type VerifyLineProfileResult = {
 	sub: string;
 	name?: string;
 	picture?: string;
@@ -8,7 +8,7 @@ type VerifyLineIdTokenResult = {
 
 const encoder = new TextEncoder();
 
-const getEnv = (env: Env | undefined, key: keyof Pick<Env, 'LINE_CHANNEL_ID' | 'LINE_SESSION_SECRET'>) => {
+const getEnv = (env: Env | undefined, key: keyof Pick<Env, 'LINE_SESSION_SECRET'>) => {
 	const value = env?.[key] || process.env[key];
 	if (!value) {
 		throw new Error(`${key} is not configured`);
@@ -46,25 +46,31 @@ const sign = async (value: string, secret: string) => {
 	return toBase64Url(new Uint8Array(signature));
 };
 
-export const verifyLineIdToken = async (idToken: string, env: Env | undefined) => {
-	const response = await fetch('https://api.line.me/oauth2/v2.1/verify', {
-		method: 'POST',
+export const verifyLineAccessToken = async (accessToken: string) => {
+	const response = await fetch('https://api.line.me/v2/profile', {
 		headers: {
-			'Content-Type': 'application/x-www-form-urlencoded'
-		},
-		body: new URLSearchParams({
-			id_token: idToken,
-			client_id: getEnv(env, 'LINE_CHANNEL_ID')
-		})
+			Authorization: `Bearer ${accessToken}`
+		}
 	});
 
 	if (!response.ok) {
-		throw new Error('LINE token verification failed');
+		throw new Error('LINE access token verification failed');
 	}
 
-	const payload = (await response.json()) as VerifyLineIdTokenResult & { error_description?: string };
+	const profile = (await response.json()) as {
+		userId?: string;
+		displayName?: string;
+		pictureUrl?: string;
+		statusMessage?: string;
+	};
+	const payload: VerifyLineProfileResult = {
+		sub: profile.userId || '',
+		name: profile.displayName,
+		picture: profile.pictureUrl
+	};
+
 	if (!payload.sub) {
-		throw new Error(payload.error_description || 'Invalid LINE token payload');
+		throw new Error('Invalid LINE profile payload');
 	}
 
 	return payload;

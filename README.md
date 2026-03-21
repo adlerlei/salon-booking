@@ -84,7 +84,7 @@ npm run build
   - 全面 RWD 響應式設計
 - **資訊安全與驗證機制 (Security & Access)** ✅
   - `/admin` 頁面強制進行 LINE 登入
-  - 前端透過 LIFF 取得 `idToken`，後端向 LINE Verify API 驗證身份
+  - 前端透過 LIFF 取得 LINE Access Token，後端向 LINE Profile API 驗證身份
   - 驗證成功後由伺服器建立 HttpOnly Session Cookie
   - `/admin` 會再透過 `admins` 資料表做白名單驗證
   - `/my-bookings` 與取消預約改為依據伺服器 Session 驗證，不再信任前端傳入 `userId`
@@ -134,8 +134,8 @@ npm run build
 
 - 所有頁面皆附掛於 LINE 官方帳號（LIFF），設計需以手機為主要裝置
 - `liff.closeWindow()` → 關閉 LIFF 視窗，回到 LINE 對話視窗
-- LIFF App 必須開啟 `openid` scope，否則拿不到 `idToken`
-- 後端需設定 `LINE_CHANNEL_ID` 與 `LINE_SESSION_SECRET`
+- LIFF App 需能取得 Access Token 與 Profile 權限
+- 後端需設定 `LINE_SESSION_SECRET`
 
 ---
 
@@ -143,11 +143,9 @@ npm run build
 
 ```sh
 DATABASE_URL=local.db
-LINE_CHANNEL_ID=你的_LINE_Login_Channel_ID
 LINE_SESSION_SECRET=請填一組足夠長的隨機字串
 ```
 
-- `LINE_CHANNEL_ID`：後端拿來向 LINE Verify API 驗證 `idToken`
 - `LINE_SESSION_SECRET`：後端簽署 Session Cookie 用，不要和其他專案共用
 
 Cloudflare Pages / Workers 也要同步設定以上變數。
@@ -218,11 +216,9 @@ wrangler d1 migrations apply salon-booking-db --remote
 #### 第 2.5 步：設定 Cloudflare 環境變數
 
 ```sh
-wrangler pages secret put LINE_CHANNEL_ID
 wrangler pages secret put LINE_SESSION_SECRET
 ```
 
-> `LINE_CHANNEL_ID` 請填 LINE Login Channel ID。  
 > `LINE_SESSION_SECRET` 請填一組高強度隨機字串。
 
 #### 第 3 步：建置專案

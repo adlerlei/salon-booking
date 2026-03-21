@@ -3,7 +3,7 @@
 	import { fade, slide, scale } from 'svelte/transition';
 
 	let profile: any = null;
-	let idToken = '';
+	let accessToken = '';
 	let error = '';
 	let bookings: any[] = [];
 	let loading = true;
@@ -14,14 +14,14 @@
 	let appointmentToCancel: any = null;
 
 	const syncSession = async () => {
-		if (!idToken) {
-			throw new Error('缺少 LINE idToken，請確認 LIFF openid 權限已開啟。');
+		if (!accessToken) {
+			throw new Error('缺少 LINE access token，請重新登入後再試。');
 		}
 
 		const res = await fetch('/api/auth/session', {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify({ idToken })
+			body: JSON.stringify({ accessToken })
 		});
 		const data = (await res.json()) as { success: boolean; message?: string };
 		if (!res.ok || !data.success) {
@@ -37,7 +37,7 @@
 			await liff.init({ liffId: '2009342816-q0rukZhq' });
 			if (liff.isLoggedIn()) {
 				profile = await liff.getProfile();
-				idToken = liff.getIDToken() || '';
+				accessToken = liff.getAccessToken() || '';
 				await syncSession();
 				await fetchBookings();
 			} else {
