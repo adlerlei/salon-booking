@@ -1,6 +1,11 @@
 // See https://svelte.dev/docs/kit/types#app.d.ts
 // for information about these interfaces
 declare global {
+	interface Env {
+		LINE_CHANNEL_ID?: string;
+		LINE_SESSION_SECRET?: string;
+	}
+
 	namespace App {
 		interface Platform {
 			env: Env;
@@ -10,7 +15,9 @@ declare global {
 		}
 
 		// interface Error {}
-		// interface Locals {}
+		interface Locals {
+			lineUserId: string | null;
+		}
 		// interface PageData {}
 		// interface PageState {}
 	}

@@ -8,6 +8,7 @@
 	export let data: PageData;
 
 	let profile: any = null;
+	let idToken = '';
 	let error = '';
 	let isSubmitting = false;
 
@@ -27,6 +28,7 @@
 				// 這樣 LIFF 的瀏覽器上下文才不會斷掉
 				await goto(`/booking-success?${params.toString()}`);
 			} else {
+				error = result.data?.message || '預約失敗，請稍後再試。';
 				isSubmitting = false;
 			}
 		};
@@ -41,6 +43,7 @@
 			await liff.init({ liffId: '2009342816-q0rukZhq' });
 			if (liff.isLoggedIn()) {
 				profile = await liff.getProfile();
+				idToken = liff.getIDToken() || '';
 			} else {
 				liff.login();
 			}
@@ -190,8 +193,7 @@
 				use:enhance={handleEnhance}
 				class="space-y-8"
 			>
-				<input type="hidden" name="lineUserId" value={profile.userId} />
-				<input type="hidden" name="customerName" value={profile.displayName} />
+				<input type="hidden" name="idToken" value={idToken} />
 				<input type="hidden" name="serviceType" value={selectedService?.name || ''} />
 				<input type="hidden" name="appointmentDate" value="{selectedDate}T{selectedTime}" />
 
@@ -407,7 +409,7 @@
 							>
 							<button
 								type="submit"
-								disabled={!selectedTime || isSubmitting}
+								disabled={!selectedTime || !idToken || isSubmitting}
 								class="ml-4 flex flex-1 items-center justify-center gap-2 rounded-xl bg-[#8F9E91] px-8 py-3 font-medium text-white shadow-md transition-all hover:bg-[#7A8A7C] hover:shadow-lg disabled:cursor-not-allowed disabled:opacity-50"
 							>
 								{#if isSubmitting}

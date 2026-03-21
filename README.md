@@ -84,22 +84,22 @@ npm run build
   - 全面 RWD 響應式設計
 - **資訊安全與驗證機制 (Security & Access)** ✅
   - `/admin` 頁面強制進行 LINE 登入
-  - 實作伺服器端白名單驗證（驗證 `lineUserId`）
-  - 無權限者會清楚顯示「存取被拒」錯誤畫面，並印出開發者可用之 `ID` 
+  - 前端透過 LIFF 取得 `idToken`，後端向 LINE Verify API 驗證身份
+  - 驗證成功後由伺服器建立 HttpOnly Session Cookie
+  - `/admin` 會再透過 `admins` 資料表做白名單驗證
+  - `/my-bookings` 與取消預約改為依據伺服器 Session 驗證，不再信任前端傳入 `userId`
+  - 無權限者會清楚顯示「存取被拒」錯誤畫面，並印出開發者可用之 `ID`
   - 移除就版 HTTP Basic Auth 彈出視窗阻擋問題
-  - 支援 LINE 取存取權杖 (Access Token) 過期時的自動重新登入並跳轉機制
+  - 支援 LINE 權杖過期時的自動重新登入與重新驗證機制
 - **LINE 圖文選單無縫整合** ✅
   - 使用專屬 `liff.line.me` 網址綁定圖文選單，實現免手動登入、自動身份識別的絲滑體驗
 
 ---
 
 ### 📋 規劃中（近期）
-
-- **用戶取消預約 `/my-bookings`**
-  - 用戶登入後可查看自己的預約列表（以 LINE userId 查詢）
-  - 可自行取消預約
-  - 取消狀態同步更新至資料庫與 Admin 後台
-  - 需要在 DB Schema 新增 `status` 欄位（`pending` / `confirmed` / `cancelled`）
+- **管理員頁面 server load 保護**
+  - 目前 `/admin` 的白名單驗證已在 API 層完成
+  - 後續可再補 route level 保護，讓未授權使用者在進頁面前就被擋下
 
 ### 💰 未來擴充（管理員進階功能）
 
@@ -134,7 +134,23 @@ npm run build
 
 - 所有頁面皆附掛於 LINE 官方帳號（LIFF），設計需以手機為主要裝置
 - `liff.closeWindow()` → 關閉 LIFF 視窗，回到 LINE 對話視窗
-- Admin 後台目前無身份驗證，不應對外公開 URL
+- LIFF App 必須開啟 `openid` scope，否則拿不到 `idToken`
+- 後端需設定 `LINE_CHANNEL_ID` 與 `LINE_SESSION_SECRET`
+
+---
+
+## 環境變數
+
+```sh
+DATABASE_URL=local.db
+LINE_CHANNEL_ID=你的_LINE_Login_Channel_ID
+LINE_SESSION_SECRET=請填一組足夠長的隨機字串
+```
+
+- `LINE_CHANNEL_ID`：後端拿來向 LINE Verify API 驗證 `idToken`
+- `LINE_SESSION_SECRET`：後端簽署 Session Cookie 用，不要和其他專案共用
+
+Cloudflare Pages / Workers 也要同步設定以上變數。
 
 ---
 
@@ -198,6 +214,16 @@ npm run db:push
 # 套用到 Cloudflare D1 遠端資料庫
 wrangler d1 migrations apply salon-booking-db --remote
 ```
+
+#### 第 2.5 步：設定 Cloudflare 環境變數
+
+```sh
+wrangler pages secret put LINE_CHANNEL_ID
+wrangler pages secret put LINE_SESSION_SECRET
+```
+
+> `LINE_CHANNEL_ID` 請填 LINE Login Channel ID。  
+> `LINE_SESSION_SECRET` 請填一組高強度隨機字串。
 
 #### 第 3 步：建置專案
 
@@ -282,4 +308,3 @@ npx sv@0.12.5 create --template minimal --types ts \
   drizzle="database:sqlite+sqlite:better-sqlite3" \
   --install npm salon-booking
 ```
-

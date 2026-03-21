@@ -7,14 +7,27 @@
 	let records: any[] = [];
 	let loading = true;
 	let error = '';
+	let idToken = '';
+
+	const syncSession = async () => {
+		if (!idToken) {
+			throw new Error('缺少 LINE idToken，請確認 LIFF openid 權限已開啟。');
+		}
+
+		const res = await fetch('/api/auth/session', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ idToken })
+		});
+		const data = (await res.json()) as { success: boolean; message?: string };
+		if (!res.ok || !data.success) {
+			throw new Error(data.message || 'LINE 驗證失敗');
+		}
+	};
 
 	const fetchBookings = async () => {
-		if (!profile?.userId) {
-			error = '無法取得 LINE 使用者 ID，請確認授權。';
-			return;
-		}
 		try {
-			const res = await fetch(`/api/admin/bookings?userId=${profile.userId}`);
+			const res = await fetch('/api/admin/bookings');
 			const data = (await res.json()) as { records: any[]; message?: string };
 			if (res.ok) {
 				records = data.records;
@@ -34,6 +47,8 @@
 			await liff.init({ liffId: '2009342816-q0rukZhq' }); // 使用同一個 LIFF ID
 			if (liff.isLoggedIn()) {
 				profile = await liff.getProfile();
+				idToken = liff.getIDToken() || '';
+				await syncSession();
 				await fetchBookings();
 				
 				// 只在成功載入後才開啟自動更新

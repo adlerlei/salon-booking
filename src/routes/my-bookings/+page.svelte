@@ -3,6 +3,7 @@
 	import { fade, slide, scale } from 'svelte/transition';
 
 	let profile: any = null;
+	let idToken = '';
 	let error = '';
 	let bookings: any[] = [];
 	let loading = true;
@@ -12,6 +13,22 @@
 	let showConfirmModal = false;
 	let appointmentToCancel: any = null;
 
+	const syncSession = async () => {
+		if (!idToken) {
+			throw new Error('缺少 LINE idToken，請確認 LIFF openid 權限已開啟。');
+		}
+
+		const res = await fetch('/api/auth/session', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ idToken })
+		});
+		const data = (await res.json()) as { success: boolean; message?: string };
+		if (!res.ok || !data.success) {
+			throw new Error(data.message || 'LINE 驗證失敗');
+		}
+	};
+
 	onMount(async () => {
 		try {
 			const liffModule = await import('@line/liff');
@@ -20,6 +37,8 @@
 			await liff.init({ liffId: '2009342816-q0rukZhq' });
 			if (liff.isLoggedIn()) {
 				profile = await liff.getProfile();
+				idToken = liff.getIDToken() || '';
+				await syncSession();
 				await fetchBookings();
 			} else {
 				liff.login();
@@ -32,7 +51,7 @@
 
 	const fetchBookings = async () => {
 		try {
-			const res = await fetch(`/api/bookings?userId=${profile.userId}`);
+			const res = await fetch('/api/bookings');
 			const data = (await res.json()) as { bookings: any[] };
 			bookings = data.bookings || [];
 		} catch (err: any) {
