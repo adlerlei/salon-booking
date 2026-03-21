@@ -236,26 +236,22 @@ npm run build
 #### 第 4 步：部署到 Cloudflare Pages
 
 ```sh
-wrangler pages deploy .svelte-kit/cloudflare --project-name salon-booking --branch salon-booking
+npm run deploy:prod
 ```
 
-> 首次執行會提示建立新 Pages 專案，依指示完成即可。
+> 這個指令會先執行 build，然後以 `--branch salon-booking` 直接部署到正式環境。  
+> 首次執行若尚未建立 Pages 專案，Wrangler 會提示你完成設定。
 
 ---
 
 ### 日常部署（更新程式碼後）
 
 ```sh
-# 1. 建置
-npm run build
-
-# 2. 部署到生產環境
-wrangler pages deploy .svelte-kit/cloudflare --project-name salon-booking --branch salon-booking
+npm run deploy:prod
 ```
 
-> ⚠️ **重要**：必須加 `--branch salon-booking` 才會部署到**生產環境**。
-> 若省略此參數，wrangler 會偵測 git branch（如 `main`），部署到**預覽環境**，
-> 正式網域 `salon-booking-a01.pages.dev` 不會更新。
+> ⚠️ `deploy:prod` 內部固定使用 `--branch salon-booking`。  
+> 若你改用其他 `wrangler pages deploy` 指令且省略這個參數，很可能只會部署到預覽環境，正式網域 `salon-booking-a01.pages.dev` 不會更新。
 
 ---
 
@@ -292,7 +288,7 @@ wrangler d1 migrations apply salon-booking-db --remote
 | `npm run dev` | 本地開發（Vite，無 D1 綁定）|
 | `npm run build` | 建置 Cloudflare Pages 產物 |
 | `npm run preview` | 本地模擬 Cloudflare 環境（含 D1）|
-| `wrangler pages deploy ...` | 部署至 Cloudflare Pages |
+| `npm run deploy:prod` | 直接部署到正式 Cloudflare Pages |
 | `npm run db:generate` | 產生 Drizzle migration 檔案 |
 | `npm run db:push` | 推送 schema 到本地 SQLite |
 | `wrangler d1 migrations apply ... --remote` | 套用 migration 到遠端 D1 |
