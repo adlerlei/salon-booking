@@ -17,6 +17,29 @@ const serviceDurations: Record<string, number> = {
 	'洗剪+頭皮保養': 60
 };
 
+const toTaipeiNowString = () => {
+	const formatter = new Intl.DateTimeFormat('sv-SE', {
+		timeZone: 'Asia/Taipei',
+		year: 'numeric',
+		month: '2-digit',
+		day: '2-digit',
+		hour: '2-digit',
+		minute: '2-digit',
+		hourCycle: 'h23'
+	});
+
+	const parts = Object.fromEntries(
+		formatter.formatToParts(new Date()).map((part) => [part.type, part.value])
+	);
+
+	return `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}`;
+};
+
+const timeToMinutes = (timeStr: string) => {
+	const [hours, minutes] = timeStr.split(':').map(Number);
+	return hours * 60 + minutes;
+};
+
 export const load = async ({ platform }) => {
 	const db = initDb(platform);
 	const allAppointments = await db
@@ -49,6 +72,52 @@ export const actions = {
 			const profile = await verifyLineIdToken(idToken, platform?.env);
 			const durationMinutes = serviceDurations[serviceType] || 60; // 預設 60 分鐘防呆
 			const db = initDb(platform);
+			const nowInTaipei = toTaipeiNowString();
+
+			if (!serviceType || !appointmentDate) {
+				return {
+					success: false,
+					message: '預約資料不完整'
+				};
+			}
+
+			if (appointmentDate < nowInTaipei) {
+				return {
+					success: false,
+					message: '不能預約已經過去的時段'
+				};
+			}
+
+			const existingAppointments = await db
+				.select({
+					appointmentDate: appointments.appointmentDate,
+					durationMinutes: appointments.durationMinutes
+				})
+				.from(appointments)
+				.where(eq(appointments.status, 'confirmed'));
+
+			const [selectedDate, selectedTime] = appointmentDate.split('T');
+			const selectedStartMinutes = timeToMinutes(selectedTime);
+			const selectedEndMinutes = selectedStartMinutes + durationMinutes;
+
+			const hasConflict = existingAppointments.some((booking: { appointmentDate: string; durationMinutes: number }) => {
+				if (!booking.appointmentDate.startsWith(selectedDate)) return false;
+
+				const bookingTime = booking.appointmentDate.split('T')[1];
+				const bookingStartMinutes = timeToMinutes(bookingTime);
+				const bookingEndMinutes = bookingStartMinutes + booking.durationMinutes;
+
+				return (
+					selectedStartMinutes < bookingEndMinutes && selectedEndMinutes > bookingStartMinutes
+				);
+			});
+
+			if (hasConflict) {
+				return {
+					success: false,
+					message: '這個時段已經被預約，請重新選擇'
+				};
+			}
 
 			await db.insert(appointments).values({
 				lineUserId: profile.sub,

@@ -110,6 +110,20 @@
 	};
 	const allSlots = generateSlots();
 
+	const getCurrentDateTime = () => {
+		const now = new Date();
+		const year = now.getFullYear();
+		const month = String(now.getMonth() + 1).padStart(2, '0');
+		const day = String(now.getDate()).padStart(2, '0');
+		const hours = String(now.getHours()).padStart(2, '0');
+		const minutes = String(now.getMinutes()).padStart(2, '0');
+
+		return {
+			date: `${year}-${month}-${day}`,
+			time: `${hours}:${minutes}`
+		};
+	};
+
 	// Helper to convert HH:MM to minutes since midnight
 	const timeToMinutes = (timeStr: string) => {
 		const [h, m] = timeStr.split(':').map(Number);
@@ -123,9 +137,15 @@
 		const slotMinutes = timeToMinutes(slot);
 		const requiredDuration = selectedService.duration;
 		const endSlotMinutes = slotMinutes + requiredDuration;
+		const now = getCurrentDateTime();
 
 		// 1. Check if it exceeds closing time (20:00 = 1200 mins)
 		if (endSlotMinutes > 20 * 60) return { time: slot, available: false };
+
+		// 1.5. 今日不可預約已經過去的時段
+		if (selectedDate === now.date && slotMinutes <= timeToMinutes(now.time)) {
+			return { time: slot, available: false };
+		}
 
 		// 2. Check collisions with existing appointments on the selected date
 		const dateAppointments =
@@ -145,6 +165,14 @@
 
 		return { time: slot, available: true };
 	});
+
+	$: {
+		if (!selectedTime) {
+			// no-op
+		} else if (!availableSlots.some((slot) => slot.time === selectedTime && slot.available)) {
+			selectedTime = '';
+		}
+	}
 </script>
 
 <div
