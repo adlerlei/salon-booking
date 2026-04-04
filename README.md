@@ -95,6 +95,7 @@ npm run deploy:prod
   - 預約完成後立即跳轉（前端 `goto()` 導頁），不再停留在時間選擇頁
   - 顯示預約摘要（顧客、服務、日期、時段）
   - 溫馨提醒文案（告知如需更改請聯繫沙龍）
+  - 「查看我的預約」按鈕（前往 `/my-bookings` 查看個人預約紀錄）
   - 「返回 LINE 聊天」按鈕（`liff.closeWindow()` 關閉 LIFF，回到官方帳號對話視窗）
 - **個人預約清單與取消功能 `/my-bookings`** ✅
   - 支援 LINE 登入自動識別用戶
@@ -148,7 +149,6 @@ npm run deploy:prod
 - **累計營收統計**
 - **預約資料 Excel / CSV 匯出**
 - **加入手機日曆（.ics / Google Calendar）**
-- **成功頁「查看我的預約」按鈕**
 - **操作紀錄（Audit Log）**
 - **預約狀態擴充**
   - 例如 `done`、`no-show`、`pending`
