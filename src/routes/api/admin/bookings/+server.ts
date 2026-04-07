@@ -1,5 +1,9 @@
 import { json } from '@sveltejs/kit';
-import { getAdminRecord, listAdminBookings } from '$lib/server/admin';
+import {
+	buildAdminDashboardStats,
+	getAdminRecord,
+	listAdminBookings
+} from '$lib/server/admin';
 
 export async function GET({ locals, platform }) {
 	if (!locals.lineUserId) {
@@ -12,5 +16,6 @@ export async function GET({ locals, platform }) {
 		return json({ success: false, message: '沒有管理員權限', records: [] }, { status: 403 });
 	}
 
-	return json({ success: true, records: await listAdminBookings(platform) });
+	const records = await listAdminBookings(platform);
+	return json({ success: true, records, stats: buildAdminDashboardStats(records) });
 }

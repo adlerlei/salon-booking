@@ -1,5 +1,9 @@
 import type { PageServerLoad } from './$types';
-import { getAdminRecord, listAdminBookings } from '$lib/server/admin';
+import {
+	buildAdminDashboardStats,
+	getAdminRecord,
+	listAdminBookings
+} from '$lib/server/admin';
 
 export const load: PageServerLoad = async ({ locals, platform }) => {
 	if (!locals.lineUserId) {
@@ -7,7 +11,8 @@ export const load: PageServerLoad = async ({ locals, platform }) => {
 			authState: 'needs-session' as const,
 			lineUserId: null,
 			adminName: '',
-			records: []
+			records: [],
+			stats: null
 		};
 	}
 
@@ -18,14 +23,18 @@ export const load: PageServerLoad = async ({ locals, platform }) => {
 			authState: 'forbidden' as const,
 			lineUserId: locals.lineUserId,
 			adminName: '',
-			records: []
+			records: [],
+			stats: null
 		};
 	}
+
+	const records = await listAdminBookings(platform);
 
 	return {
 		authState: 'authorized' as const,
 		lineUserId: locals.lineUserId,
 		adminName: adminRecord.name,
-		records: await listAdminBookings(platform)
+		records,
+		stats: buildAdminDashboardStats(records)
 	};
 };

@@ -9,15 +9,18 @@
 
 	type AuthState = PageData['authState'];
 	type BookingRecord = PageData['records'][number];
+	type DashboardStats = NonNullable<PageData['stats']>;
 	type AdminBookingsResponse = {
 		success: boolean;
 		message?: string;
 		records?: BookingRecord[];
+		stats?: DashboardStats;
 	};
 
 	const liffId = '2009342816-q0rukZhq';
 	let authState = $state<AuthState>('needs-session');
 	let records = $state<BookingRecord[]>([]);
+	let stats = $state<DashboardStats | null>(null);
 	let loading = $state(false);
 	let syncingSession = $state(false);
 	let error = $state('');
@@ -73,6 +76,14 @@
 
 	const formatTime = (dateTime: string) => dateTime.split('T')[1] || '';
 
+	const formatServiceSummary = (serviceStats: DashboardStats['day']['serviceStats']) => {
+		if (serviceStats.length === 0) return '目前沒有預約服務項目';
+		return serviceStats
+			.slice(0, 3)
+			.map((item) => `${item.serviceType} ${item.count}`)
+			.join(' ・ ');
+	};
+
 	const getEndTime = (dateTime: string, durationMinutes: number) => {
 		const start = parseDateTime(dateTime);
 		const end = new Date(start.getTime() + durationMinutes * 60 * 1000);
@@ -125,12 +136,13 @@
 			});
 			const result = (await res.json()) as AdminBookingsResponse;
 
-			if (!res.ok || !result.success) {
-				throw new Error(result.message || '後台資料更新失敗');
-			}
+				if (!res.ok || !result.success) {
+					throw new Error(result.message || '後台資料更新失敗');
+				}
 
-			records = result.records || [];
-			error = '';
+				records = result.records || [];
+				stats = result.stats || null;
+				error = '';
 		} catch (err) {
 			error = err instanceof Error ? err.message : '後台資料更新失敗';
 			stopPolling();
@@ -180,6 +192,7 @@
 	$effect(() => {
 		authState = data.authState;
 		records = [...data.records];
+		stats = data.stats;
 
 		if (authState !== 'needs-session') {
 			loading = false;
@@ -403,60 +416,125 @@
 					class="rounded-[30px] border border-white/60 bg-[linear-gradient(165deg,rgba(255,255,255,0.78),rgba(239,233,226,0.92))] p-6 shadow-[0_24px_60px_rgba(74,69,64,0.08)] backdrop-blur-xl"
 					in:fly={{ y: 24, duration: 400, easing: cubicOut }}
 				>
-					<p class="text-[11px] tracking-[0.28em] text-[#9b9086] uppercase">Next Guest</p>
-					{#if nextBooking}
-						<div class="mt-4 rounded-[26px] border border-[#e4d8cd] bg-white/80 p-5 shadow-sm">
-							<div class="flex items-start justify-between gap-4">
-								<div>
-									<p class="text-xs tracking-[0.22em] text-[#9b9086]">
-										{getDayLabel(nextBooking.appointmentDate)}
-									</p>
-									<h3 class="mt-2 text-2xl font-semibold text-[#4c4640]">
-										{nextBooking.customerName}
-									</h3>
-									<p class="mt-1 text-sm text-[#786f68]">{nextBooking.serviceType}</p>
+					<p class="text-[11px] tracking-[0.28em] text-[#9b9086] uppercase">Booking Stats</p>
+					<h2 class="mt-3 text-2xl font-semibold text-[#4c4640]">預約統計摘要</h2>
+					<p class="mt-2 text-sm leading-7 text-[#786f68]">
+						先看預約來客數與熱門服務項目，之後再補更精準的到店統計。
+					</p>
+
+					{#if stats}
+						<div class="mt-5 grid gap-3">
+							<div class="rounded-[24px] border border-[#e4d8cd] bg-white/80 p-4 shadow-sm">
+								<div class="flex items-center justify-between gap-3">
+									<div>
+										<p class="text-[11px] tracking-[0.22em] text-[#9b9086] uppercase">
+											{stats.day.label}
+										</p>
+										<p class="mt-2 text-3xl font-semibold text-[#4c4640]">
+											{stats.day.visitorCount}
+										</p>
+									</div>
+									<span
+										class="rounded-full bg-[#f1ece6] px-3 py-1 text-[11px] font-semibold tracking-[0.16em] text-[#857c74]"
+									>
+										預約來客數
+									</span>
 								</div>
-								<span
-									class="rounded-full border border-[#dde6d8] bg-[#f3f7f1] px-3 py-1 text-[11px] font-semibold tracking-[0.18em] text-[#71806f]"
-								>
-									下一位
-								</span>
+								<p class="mt-4 text-sm leading-7 text-[#786f68]">
+									{formatServiceSummary(stats.day.serviceStats)}
+								</p>
 							</div>
 
-							<div class="mt-5 grid gap-3 sm:grid-cols-2">
-								<div class="rounded-2xl bg-[#f8f4ef] px-4 py-3">
-									<p class="text-[11px] tracking-[0.2em] text-[#9b9086] uppercase">到店時間</p>
-									<p class="mt-2 text-lg font-semibold text-[#4c4640]">
-										{formatTime(nextBooking.appointmentDate)}
+							<div class="grid gap-3 sm:grid-cols-2">
+								<div class="rounded-[22px] border border-[#ece3d9] bg-[#fcfaf7]/85 p-4 shadow-sm">
+									<p class="text-[11px] tracking-[0.22em] text-[#9b9086] uppercase">
+										{stats.week.label}
+									</p>
+									<p class="mt-2 text-2xl font-semibold text-[#4c4640]">
+										{stats.week.visitorCount}
+									</p>
+									<p class="mt-3 text-sm leading-7 text-[#786f68]">
+										{formatServiceSummary(stats.week.serviceStats)}
 									</p>
 								</div>
-								<div class="rounded-2xl bg-[#f8f4ef] px-4 py-3">
-									<p class="text-[11px] tracking-[0.2em] text-[#9b9086] uppercase">預估結束</p>
-									<p class="mt-2 text-lg font-semibold text-[#4c4640]">
-										{getEndTime(nextBooking.appointmentDate, nextBooking.durationMinutes)}
+								<div class="rounded-[22px] border border-[#ece3d9] bg-[#fcfaf7]/85 p-4 shadow-sm">
+									<p class="text-[11px] tracking-[0.22em] text-[#9b9086] uppercase">
+										{stats.month.label}
+									</p>
+									<p class="mt-2 text-2xl font-semibold text-[#4c4640]">
+										{stats.month.visitorCount}
+									</p>
+									<p class="mt-3 text-sm leading-7 text-[#786f68]">
+										{formatServiceSummary(stats.month.serviceStats)}
 									</p>
 								</div>
 							</div>
 						</div>
 					{:else}
 						<div
-							class="mt-4 rounded-[26px] border border-dashed border-[#ddd2c7] bg-white/65 p-6 text-center text-[#7f766f]"
+							class="mt-5 rounded-[26px] border border-dashed border-[#ddd2c7] bg-white/65 p-6 text-center text-[#7f766f]"
 						>
-							<p class="text-lg font-medium">目前沒有即將到來的預約</p>
-							<p class="mt-2 text-sm leading-7">今天的時段看起來已經清空，可以稍微喘口氣。</p>
+							<p class="text-lg font-medium">統計資料整理中</p>
+							<p class="mt-2 text-sm leading-7">
+								完成授權後就會顯示今日、本週、本月的預約摘要。
+							</p>
 						</div>
 					{/if}
 
-					<div
-						class="mt-4 rounded-[24px] border border-[#eadfd4] bg-[#f8f3ee]/85 p-4 text-sm leading-7 text-[#786f68]"
-					>
-						<p class="font-medium text-[#5c554f]">業績統計還不建議現在上線</p>
-						<p class="mt-1">
-							目前資料表還沒有金額與手動完工狀態，若直接顯示日 / 週 / 月業績，數字會不準。
-						</p>
-					</div>
+					<p class="mt-5 text-[11px] leading-6 tracking-[0.12em] text-[#9b9086]">
+						統計目前以非取消預約作為「預約來客數」，等手動完工狀態完成後可再改為更精準的到店數。
+					</p>
 				</section>
 			</div>
+
+			<section
+				class="mt-6 rounded-[30px] border border-white/60 bg-[linear-gradient(165deg,rgba(255,255,255,0.78),rgba(239,233,226,0.92))] p-6 shadow-[0_24px_60px_rgba(74,69,64,0.08)] backdrop-blur-xl"
+				in:fly={{ y: 24, duration: 400, easing: cubicOut }}
+			>
+				<p class="text-[11px] tracking-[0.28em] text-[#9b9086] uppercase">Next Guest</p>
+				{#if nextBooking}
+					<div class="mt-4 rounded-[26px] border border-[#e4d8cd] bg-white/80 p-5 shadow-sm">
+						<div class="flex items-start justify-between gap-4">
+							<div>
+								<p class="text-xs tracking-[0.22em] text-[#9b9086]">
+									{getDayLabel(nextBooking.appointmentDate)}
+								</p>
+								<h3 class="mt-2 text-2xl font-semibold text-[#4c4640]">
+									{nextBooking.customerName}
+								</h3>
+								<p class="mt-1 text-sm text-[#786f68]">{nextBooking.serviceType}</p>
+							</div>
+							<span
+								class="rounded-full border border-[#dde6d8] bg-[#f3f7f1] px-3 py-1 text-[11px] font-semibold tracking-[0.18em] text-[#71806f]"
+							>
+								下一位
+							</span>
+						</div>
+
+						<div class="mt-5 grid gap-3 sm:grid-cols-2">
+							<div class="rounded-2xl bg-[#f8f4ef] px-4 py-3">
+								<p class="text-[11px] tracking-[0.2em] text-[#9b9086] uppercase">到店時間</p>
+								<p class="mt-2 text-lg font-semibold text-[#4c4640]">
+									{formatTime(nextBooking.appointmentDate)}
+								</p>
+							</div>
+							<div class="rounded-2xl bg-[#f8f4ef] px-4 py-3">
+								<p class="text-[11px] tracking-[0.2em] text-[#9b9086] uppercase">預估結束</p>
+								<p class="mt-2 text-lg font-semibold text-[#4c4640]">
+									{getEndTime(nextBooking.appointmentDate, nextBooking.durationMinutes)}
+								</p>
+							</div>
+						</div>
+					</div>
+				{:else}
+					<div
+						class="mt-4 rounded-[26px] border border-dashed border-[#ddd2c7] bg-white/65 p-6 text-center text-[#7f766f]"
+					>
+						<p class="text-lg font-medium">目前沒有即將到來的預約</p>
+						<p class="mt-2 text-sm leading-7">今天的時段看起來已經清空，可以稍微喘口氣。</p>
+					</div>
+				{/if}
+			</section>
 
 			{#if error}
 				<div
