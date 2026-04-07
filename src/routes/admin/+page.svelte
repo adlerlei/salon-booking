@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { resolve } from '$app/paths';
 	import { goto } from '$app/navigation';
 	import { cubicOut } from 'svelte/easing';
 	import { fade, fly, scale } from 'svelte/transition';
@@ -16,6 +17,12 @@
 		records?: BookingRecord[];
 		stats?: DashboardStats;
 	};
+	type BookingDayGroup = {
+		key: string;
+		label: string;
+		records: BookingRecord[];
+	};
+	type AdminTab = 'today' | 'future' | 'stats' | 'records';
 
 	const liffId = '2009342816-q0rukZhq';
 	let authState = $state<AuthState>('needs-session');
@@ -27,6 +34,7 @@
 	let profile = $state<{ displayName?: string; pictureUrl?: string } | null>(null);
 	let interval: ReturnType<typeof setInterval> | null = null;
 	let isMounted = $state(false);
+	let activeTab = $state<AdminTab>('today');
 
 	const parseDateTime = (dateTime: string) => {
 		const [datePart, timePart = '00:00'] = dateTime.split('T');
@@ -55,8 +63,7 @@
 	const isToday = (dateTime: string) => isSameDay(dateTime, new Date());
 
 	const isTomorrow = (dateTime: string) => {
-		const tomorrow = new Date();
-		tomorrow.setDate(tomorrow.getDate() + 1);
+		const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000);
 		return isSameDay(dateTime, tomorrow);
 	};
 
@@ -84,6 +91,27 @@
 			.join(' ・ ');
 	};
 
+	const formatTimeUntil = (dateTime: string) => {
+		const diffMinutes = Math.max(
+			0,
+			Math.round((parseDateTime(dateTime).getTime() - Date.now()) / (60 * 1000))
+		);
+
+		if (diffMinutes < 1) return '現在';
+		if (diffMinutes < 60) return `${diffMinutes} 分鐘後`;
+
+		const hours = Math.floor(diffMinutes / 60);
+		const minutes = diffMinutes % 60;
+
+		if (hours >= 24) {
+			const days = Math.floor(hours / 24);
+			const remainingHours = hours % 24;
+			return remainingHours === 0 ? `${days} 天後` : `${days} 天 ${remainingHours} 小時後`;
+		}
+
+		return minutes === 0 ? `${hours} 小時後` : `${hours} 小時 ${minutes} 分後`;
+	};
+
 	const getEndTime = (dateTime: string, durationMinutes: number) => {
 		const start = parseDateTime(dateTime);
 		const end = new Date(start.getTime() + durationMinutes * 60 * 1000);
@@ -98,6 +126,28 @@
 		if (isToday(dateTime)) return '今天';
 		if (isTomorrow(dateTime)) return '明天';
 		return formatDate(dateTime);
+	};
+
+	const groupBookingsByDay = (input: BookingRecord[]): BookingDayGroup[] => {
+		const groups: BookingDayGroup[] = [];
+
+		for (const record of input) {
+			const key = record.appointmentDate.split('T')[0] || record.appointmentDate;
+			const current = groups[groups.length - 1];
+
+			if (current && current.key === key) {
+				current.records.push(record);
+				continue;
+			}
+
+			groups.push({
+				key,
+				label: getDayLabel(record.appointmentDate),
+				records: [record]
+			});
+		}
+
+		return groups;
 	};
 
 	const stopPolling = () => {
@@ -136,13 +186,13 @@
 			});
 			const result = (await res.json()) as AdminBookingsResponse;
 
-				if (!res.ok || !result.success) {
-					throw new Error(result.message || '後台資料更新失敗');
-				}
+			if (!res.ok || !result.success) {
+				throw new Error(result.message || '後台資料更新失敗');
+			}
 
-				records = result.records || [];
-				stats = result.stats || null;
-				error = '';
+			records = result.records || [];
+			stats = result.stats || null;
+			error = '';
 		} catch (err) {
 			error = err instanceof Error ? err.message : '後台資料更新失敗';
 			stopPolling();
@@ -171,7 +221,11 @@
 				loading = true;
 				syncingSession = true;
 				await syncSession(liff.getAccessToken() || '');
-				await goto('/admin', { replaceState: true, invalidateAll: true, noScroll: true });
+				await goto(resolve('/admin'), {
+					replaceState: true,
+					invalidateAll: true,
+					noScroll: true
+				});
 				return;
 			}
 		} catch (err) {
@@ -232,6 +286,7 @@
 	);
 
 	const nextBooking = $derived(upcomingBookings[0] ?? null);
+	const upcomingDayGroups = $derived(groupBookingsByDay(laterUpcomingBookings));
 
 	const pastBookings = $derived(
 		confirmedBookings.filter((record) => isPast(record.appointmentDate)).sort(compareDesc)
@@ -271,7 +326,7 @@
 					五
 				</div>
 				<div>
-					<p class="text-[11px] tracking-[0.28em] text-[#8E857D] uppercase">Admin Room</p>
+					<p class="text-[11px] tracking-[0.28em] text-[#8E857D] uppercase">管理後台</p>
 					<h1
 						class="font-serif text-xl font-semibold tracking-[0.04em]"
 						style="font-family: 'Playfair Display', serif;"
@@ -362,373 +417,357 @@
 				</div>
 			</div>
 		{:else if authState === 'authorized'}
-			<div class="grid gap-4 lg:grid-cols-[1.45fr_0.95fr]">
-				<section
-					class="rounded-[30px] border border-white/60 bg-[linear-gradient(145deg,rgba(255,255,255,0.74),rgba(246,239,232,0.88))] p-6 shadow-[0_24px_60px_rgba(74,69,64,0.08)] backdrop-blur-xl"
-					in:fly={{ y: 18, duration: 350, easing: cubicOut }}
-				>
-					<div class="mt-3 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-						<div>
-							<h2
-								class="font-serif text-[30px] leading-tight text-[#453f3a]"
-								style="font-family: 'Playfair Display', serif;"
-							>
-								今天的預約重點
-							</h2>
-							<p class="mt-3 max-w-2xl text-sm leading-7 text-[#786f68]">
-								{todayHeading}。先看今天，再看接下來的預約。
-							</p>
-						</div>
-						<div
-							class="rounded-2xl border border-[#e2d7cb] bg-white/80 px-4 py-3 text-sm text-[#6a625b] shadow-sm"
+			<section
+				class="rounded-[30px] border border-white/60 bg-[linear-gradient(145deg,rgba(255,255,255,0.78),rgba(246,239,232,0.92))] p-5 shadow-[0_24px_60px_rgba(74,69,64,0.08)] backdrop-blur-xl md:p-6"
+				in:fly={{ y: 18, duration: 350, easing: cubicOut }}
+			>
+				<div class="flex items-center justify-between gap-3">
+					<h2 class="text-lg font-semibold text-[#453f3a] md:text-xl">{todayHeading}</h2>
+					{#if error}
+						<span
+							class="rounded-full border border-[#ecd6d2] bg-[#fbefed] px-3 py-1 text-xs font-medium text-[#a06f6f]"
 						>
-							<p class="font-medium">每 30 秒自動更新</p>
-						</div>
+							更新失敗
+						</span>
+					{/if}
+				</div>
+
+				<div class="mt-4 flex gap-2 overflow-x-auto pb-1">
+					<button
+						type="button"
+						class={`shrink-0 rounded-full px-4 py-2 text-sm font-medium shadow-sm transition-colors ${
+							activeTab === 'today'
+								? 'bg-[#8F9E91] text-white'
+								: 'border border-[#dfd3c8] bg-white/82 text-[#5f5750]'
+						}`}
+						onclick={() => (activeTab = 'today')}
+					>
+						今日 {todayOverview.total}
+					</button>
+					<button
+						type="button"
+						class={`shrink-0 rounded-full px-4 py-2 text-sm font-medium shadow-sm transition-colors ${
+							activeTab === 'future'
+								? 'bg-[#8F9E91] text-white'
+								: 'border border-[#dfd3c8] bg-white/82 text-[#5f5750]'
+						}`}
+						onclick={() => (activeTab = 'future')}
+					>
+						接下來 {laterUpcomingBookings.length}
+					</button>
+					<button
+						type="button"
+						class={`shrink-0 rounded-full px-4 py-2 text-sm font-medium shadow-sm transition-colors ${
+							activeTab === 'stats'
+								? 'bg-[#8F9E91] text-white'
+								: 'border border-[#dfd3c8] bg-white/82 text-[#5f5750]'
+						}`}
+						onclick={() => (activeTab = 'stats')}
+					>
+						統計
+					</button>
+					<button
+						type="button"
+						class={`shrink-0 rounded-full px-4 py-2 text-sm font-medium shadow-sm transition-colors ${
+							activeTab === 'records'
+								? 'bg-[#8F9E91] text-white'
+								: 'border border-[#dfd3c8] bg-white/82 text-[#5f5750]'
+						}`}
+						onclick={() => (activeTab = 'records')}
+					>
+						紀錄 {pastBookings.length + cancelledBookings.length}
+					</button>
+				</div>
+
+				{#if error}
+					<div
+						class="mt-4 rounded-[22px] border border-[#ecd6d2] bg-white/82 px-4 py-3 text-sm text-[#8f5f5f] shadow-sm"
+						in:fade
+					>
+						{error}
+					</div>
+				{/if}
+			</section>
+
+			{#if activeTab === 'today'}
+				<div class="mt-6 grid gap-3 sm:grid-cols-3">
+					<div class="rounded-[24px] border border-[#e3eadf] bg-[#f6faf4]/92 p-4 shadow-sm">
+						<p class="text-xs tracking-[0.18em] text-[#7f8d7d]">待服務</p>
+						<p class="mt-3 text-3xl font-semibold text-[#61705f]">{todayOverview.upcoming}</p>
+					</div>
+					<div class="rounded-[24px] border border-[#ece3d9] bg-white/82 p-4 shadow-sm">
+						<p class="text-xs tracking-[0.18em] text-[#9b9086]">已過時間</p>
+						<p class="mt-3 text-3xl font-semibold text-[#4c4640]">{todayOverview.finished}</p>
+					</div>
+					<div class="rounded-[24px] border border-[#eeddd8] bg-[#fbf4f2]/92 p-4 shadow-sm">
+						<p class="text-xs tracking-[0.18em] text-[#b08080]">已取消</p>
+						<p class="mt-3 text-3xl font-semibold text-[#9f6d6d]">{todayOverview.cancelled}</p>
+					</div>
+				</div>
+
+				<section
+					class="mt-6 rounded-[30px] border border-white/60 bg-white/78 p-5 shadow-[0_24px_60px_rgba(74,69,64,0.08)] backdrop-blur-xl md:p-6"
+					in:fly={{ y: 18, duration: 360, easing: cubicOut }}
+				>
+					<div class="flex items-center justify-between gap-3">
+						<h2 class="text-xl font-semibold text-[#4c4640]">下一位</h2>
+						{#if nextBooking}
+							<span class="text-sm font-medium text-[#71806f]">
+								{formatTimeUntil(nextBooking.appointmentDate)}
+							</span>
+						{/if}
 					</div>
 
-					<div class="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-						<div class="rounded-[24px] border border-[#ece3d9] bg-white/75 p-4 shadow-sm">
-							<p class="text-xs tracking-[0.18em] text-[#9b9086]">今日預約</p>
-							<p class="mt-3 text-3xl font-semibold text-[#4c4640]">{todayOverview.total}</p>
-							<p class="mt-2 text-xs text-[#857c74]">今天總共有幾筆預約</p>
+					{#if nextBooking}
+						<div class="mt-4 rounded-[24px] border border-[#ece3d9] bg-[#fcfaf7]/86 p-4 shadow-sm">
+							<div class="grid gap-4 md:grid-cols-[6rem_minmax(0,1fr)_auto] md:items-center">
+								<div class="rounded-[20px] bg-[#f1ebe4] px-3 py-4 text-center">
+									<p class="text-2xl font-semibold text-[#4c4640]">
+										{formatTime(nextBooking.appointmentDate)}
+									</p>
+								</div>
+								<div>
+									<h3 class="text-xl font-semibold text-[#47413c]">
+										{nextBooking.customerName}
+									</h3>
+									<p class="mt-1 text-sm text-[#7a7169]">{nextBooking.serviceType}</p>
+								</div>
+								<div class="text-sm text-[#5f5750] md:text-right">
+									<p>{getDayLabel(nextBooking.appointmentDate)}</p>
+									<p class="mt-1">
+										至 {getEndTime(nextBooking.appointmentDate, nextBooking.durationMinutes)}
+									</p>
+								</div>
+							</div>
 						</div>
-						<div class="rounded-[24px] border border-[#e3eadf] bg-[#f6faf4]/90 p-4 shadow-sm">
-							<p class="text-xs tracking-[0.18em] text-[#7f8d7d]">待服務</p>
-							<p class="mt-3 text-3xl font-semibold text-[#61705f]">{todayOverview.upcoming}</p>
-							<p class="mt-2 text-xs text-[#7d877b]">今天還沒開始的預約</p>
+					{:else}
+						<div
+							class="mt-4 rounded-[24px] border border-dashed border-[#ded2c6] bg-[#fbf7f2]/80 px-5 py-8 text-center text-[#7f766f]"
+						>
+							目前沒有預約
 						</div>
-						<div class="rounded-[24px] border border-[#eeddd8] bg-[#fbf4f2]/90 p-4 shadow-sm">
-							<p class="text-xs tracking-[0.18em] text-[#b08080]">今日取消</p>
-							<p class="mt-3 text-3xl font-semibold text-[#9f6d6d]">{todayOverview.cancelled}</p>
-							<p class="mt-2 text-xs text-[#9b7e7e]">今天取消的預約</p>
-						</div>
-					</div>
+					{/if}
 				</section>
 
 				<section
-					class="rounded-[30px] border border-white/60 bg-[linear-gradient(165deg,rgba(255,255,255,0.78),rgba(239,233,226,0.92))] p-6 shadow-[0_24px_60px_rgba(74,69,64,0.08)] backdrop-blur-xl"
-					in:fly={{ y: 24, duration: 400, easing: cubicOut }}
+					class="mt-6 rounded-[30px] border border-white/60 bg-white/78 p-5 shadow-[0_24px_60px_rgba(74,69,64,0.08)] backdrop-blur-xl md:p-6"
+					in:fly={{ y: 18, duration: 350, easing: cubicOut }}
 				>
-					<h2 class="text-2xl font-semibold text-[#4c4640]">預約統計</h2>
-					<p class="mt-2 text-sm leading-7 text-[#786f68]">
-						看今天、本週、本月有幾位客人，以及最常預約的服務。
-					</p>
+					<div class="flex items-center justify-between gap-3">
+						<h2 class="text-xl font-semibold text-[#4c4640]">今日預約</h2>
+						<span class="text-sm text-[#857c74]">{todayBookings.length} 筆</span>
+					</div>
+
+					{#if todayBookings.length > 0}
+						<div class="mt-4 space-y-3">
+							{#each todayBookings as record (record.id)}
+								<div
+									class="rounded-[24px] border border-[#ece3d9] bg-[#fcfaf7]/86 p-4 shadow-sm"
+									in:fade
+								>
+									<div class="grid gap-3 md:grid-cols-[6rem_minmax(0,1fr)_auto] md:items-center">
+										<div class="rounded-[20px] bg-[#f1ebe4] px-3 py-3 text-center">
+											<p class="text-2xl font-semibold text-[#4c4640]">
+												{formatTime(record.appointmentDate)}
+											</p>
+										</div>
+										<div>
+											<h3 class="text-lg font-semibold text-[#47413c]">{record.customerName}</h3>
+											<p class="mt-1 text-sm text-[#7a7169]">{record.serviceType}</p>
+										</div>
+										<div class="text-sm text-[#5f5750] md:text-right">
+											<p>{record.durationMinutes} 分鐘</p>
+											<p class="mt-1">
+												至 {getEndTime(record.appointmentDate, record.durationMinutes)}
+											</p>
+										</div>
+									</div>
+								</div>
+							{/each}
+						</div>
+					{:else}
+						<div
+							class="mt-4 rounded-[24px] border border-dashed border-[#ded2c6] bg-[#fbf7f2]/80 px-5 py-8 text-center text-[#7f766f]"
+						>
+							目前沒有預約
+						</div>
+					{/if}
+				</section>
+			{:else if activeTab === 'future'}
+				<section
+					class="mt-6 rounded-[30px] border border-white/60 bg-white/78 p-5 shadow-[0_24px_60px_rgba(74,69,64,0.08)] backdrop-blur-xl md:p-6"
+					in:fly={{ y: 18, duration: 380, easing: cubicOut }}
+				>
+					<div class="flex items-center justify-between gap-3">
+						<h2 class="text-xl font-semibold text-[#4c4640]">接下來</h2>
+						<span class="text-sm text-[#857c74]">{laterUpcomingBookings.length} 筆</span>
+					</div>
+
+					{#if upcomingDayGroups.length > 0}
+						<div class="mt-4 space-y-4">
+							{#each upcomingDayGroups as group (group.key)}
+								<div class="rounded-[24px] border border-[#ece3d9] bg-[#fcfaf7]/86 p-4 shadow-sm">
+									<div class="flex items-center justify-between gap-3">
+										<h3 class="text-base font-semibold text-[#47413c]">{group.label}</h3>
+										<span class="text-xs text-[#8d847c]">{group.records.length} 筆</span>
+									</div>
+									<div class="mt-4 space-y-3">
+										{#each group.records as record (record.id)}
+											<div class="flex items-start justify-between gap-3 text-sm">
+												<div>
+													<p class="font-medium text-[#5c554f]">
+														{formatTime(record.appointmentDate)}
+														{record.customerName}
+													</p>
+													<p class="mt-1 text-[#7a7169]">{record.serviceType}</p>
+												</div>
+												<span class="whitespace-nowrap text-[#8d847c]">
+													{record.durationMinutes} 分
+												</span>
+											</div>
+										{/each}
+									</div>
+								</div>
+							{/each}
+						</div>
+					{:else}
+						<div
+							class="mt-4 rounded-[24px] border border-dashed border-[#ded2c6] bg-[#fbf7f2]/80 px-5 py-8 text-center text-[#7f766f]"
+						>
+							目前沒有預約
+						</div>
+					{/if}
+				</section>
+			{:else if activeTab === 'stats'}
+				<section
+					class="mt-6 rounded-[30px] border border-white/60 bg-white/78 p-5 shadow-[0_24px_60px_rgba(74,69,64,0.08)] backdrop-blur-xl md:p-6"
+					in:fly={{ y: 18, duration: 350, easing: cubicOut }}
+				>
+					<h2 class="text-xl font-semibold text-[#4c4640]">預約統計</h2>
 
 					{#if stats}
-						<div class="mt-5 grid gap-3">
-							<div class="rounded-[24px] border border-[#e4d8cd] bg-white/80 p-4 shadow-sm">
-								<div class="flex items-center justify-between gap-3">
-									<div>
-										<p class="text-[11px] tracking-[0.22em] text-[#9b9086] uppercase">
-											{stats.day.label}
-										</p>
-										<p class="mt-2 text-3xl font-semibold text-[#4c4640]">
-											{stats.day.visitorCount}
-										</p>
-									</div>
-									<span
-										class="rounded-full bg-[#f1ece6] px-3 py-1 text-[11px] font-semibold tracking-[0.16em] text-[#857c74]"
-									>
-										預約來客數
-									</span>
-								</div>
-								<p class="mt-4 text-sm leading-7 text-[#786f68]">
+						<div class="mt-4 grid gap-3 lg:grid-cols-3">
+							<div class="rounded-[22px] border border-[#e4d8cd] bg-white/82 p-4 shadow-sm">
+								<p class="text-[11px] tracking-[0.22em] text-[#9b9086] uppercase">
+									{stats.day.label}
+								</p>
+								<p class="mt-2 text-2xl font-semibold text-[#4c4640]">{stats.day.visitorCount}</p>
+								<p class="mt-3 text-sm text-[#786f68]">
 									{formatServiceSummary(stats.day.serviceStats)}
 								</p>
 							</div>
-
-							<div class="grid gap-3 sm:grid-cols-2">
-								<div class="rounded-[22px] border border-[#ece3d9] bg-[#fcfaf7]/85 p-4 shadow-sm">
-									<p class="text-[11px] tracking-[0.22em] text-[#9b9086] uppercase">
-										{stats.week.label}
-									</p>
-									<p class="mt-2 text-2xl font-semibold text-[#4c4640]">
-										{stats.week.visitorCount}
-									</p>
-									<p class="mt-3 text-sm leading-7 text-[#786f68]">
-										{formatServiceSummary(stats.week.serviceStats)}
-									</p>
-								</div>
-								<div class="rounded-[22px] border border-[#ece3d9] bg-[#fcfaf7]/85 p-4 shadow-sm">
-									<p class="text-[11px] tracking-[0.22em] text-[#9b9086] uppercase">
-										{stats.month.label}
-									</p>
-									<p class="mt-2 text-2xl font-semibold text-[#4c4640]">
-										{stats.month.visitorCount}
-									</p>
-									<p class="mt-3 text-sm leading-7 text-[#786f68]">
-										{formatServiceSummary(stats.month.serviceStats)}
-									</p>
-								</div>
+							<div class="rounded-[22px] border border-[#ece3d9] bg-[#fcfaf7]/85 p-4 shadow-sm">
+								<p class="text-[11px] tracking-[0.22em] text-[#9b9086] uppercase">
+									{stats.week.label}
+								</p>
+								<p class="mt-2 text-2xl font-semibold text-[#4c4640]">{stats.week.visitorCount}</p>
+								<p class="mt-3 text-sm text-[#786f68]">
+									{formatServiceSummary(stats.week.serviceStats)}
+								</p>
+							</div>
+							<div class="rounded-[22px] border border-[#ece3d9] bg-[#fcfaf7]/85 p-4 shadow-sm">
+								<p class="text-[11px] tracking-[0.22em] text-[#9b9086] uppercase">
+									{stats.month.label}
+								</p>
+								<p class="mt-2 text-2xl font-semibold text-[#4c4640]">{stats.month.visitorCount}</p>
+								<p class="mt-3 text-sm text-[#786f68]">
+									{formatServiceSummary(stats.month.serviceStats)}
+								</p>
 							</div>
 						</div>
 					{:else}
 						<div
-							class="mt-5 rounded-[26px] border border-dashed border-[#ddd2c7] bg-white/65 p-6 text-center text-[#7f766f]"
+							class="mt-4 rounded-[24px] border border-dashed border-[#ddd2c7] bg-white/65 p-6 text-center text-[#7f766f]"
 						>
-							<p class="text-lg font-medium">統計資料整理中</p>
-							<p class="mt-2 text-sm leading-7">
-								完成授權後就會顯示今日、本週、本月的預約摘要。
-							</p>
+							統計資料整理中
 						</div>
 					{/if}
-
-					<p class="mt-5 text-xs leading-6 text-[#9b9086]">
-						這裡是依照預約資料統計，已取消的不會算進來。
-					</p>
 				</section>
-			</div>
-
-			<section
-				class="mt-6 rounded-[30px] border border-white/60 bg-[linear-gradient(165deg,rgba(255,255,255,0.78),rgba(239,233,226,0.92))] p-6 shadow-[0_24px_60px_rgba(74,69,64,0.08)] backdrop-blur-xl"
-				in:fly={{ y: 24, duration: 400, easing: cubicOut }}
-			>
-				<h2 class="text-2xl font-semibold text-[#4c4640]">下一位客人</h2>
-				{#if nextBooking}
-					<div class="mt-4 rounded-[26px] border border-[#e4d8cd] bg-white/80 p-5 shadow-sm">
-						<div class="flex items-start justify-between gap-4">
-							<div>
-								<p class="text-xs tracking-[0.22em] text-[#9b9086]">
-									{getDayLabel(nextBooking.appointmentDate)}
-								</p>
-								<h3 class="mt-2 text-2xl font-semibold text-[#4c4640]">
-									{nextBooking.customerName}
-								</h3>
-								<p class="mt-1 text-sm text-[#786f68]">{nextBooking.serviceType}</p>
-							</div>
-							<span
-								class="rounded-full border border-[#dde6d8] bg-[#f3f7f1] px-3 py-1 text-[11px] font-semibold tracking-[0.18em] text-[#71806f]"
-							>
-								下一位
-							</span>
-						</div>
-
-						<div class="mt-5 grid gap-3 sm:grid-cols-2">
-							<div class="rounded-2xl bg-[#f8f4ef] px-4 py-3">
-								<p class="text-[11px] tracking-[0.2em] text-[#9b9086] uppercase">到店時間</p>
-								<p class="mt-2 text-lg font-semibold text-[#4c4640]">
-									{formatTime(nextBooking.appointmentDate)}
-								</p>
-							</div>
-							<div class="rounded-2xl bg-[#f8f4ef] px-4 py-3">
-								<p class="text-[11px] tracking-[0.2em] text-[#9b9086] uppercase">預估結束</p>
-								<p class="mt-2 text-lg font-semibold text-[#4c4640]">
-									{getEndTime(nextBooking.appointmentDate, nextBooking.durationMinutes)}
-								</p>
-							</div>
-						</div>
-					</div>
-				{:else}
-					<div
-						class="mt-4 rounded-[26px] border border-dashed border-[#ddd2c7] bg-white/65 p-6 text-center text-[#7f766f]"
+			{:else if activeTab === 'records'}
+				<div class="mt-6 grid gap-4 xl:grid-cols-2">
+					<section
+						class="rounded-[30px] border border-white/60 bg-white/78 p-5 shadow-[0_24px_60px_rgba(74,69,64,0.08)] backdrop-blur-xl md:p-6"
+						in:fly={{ y: 18, duration: 350, easing: cubicOut }}
 					>
-						<p class="text-lg font-medium">目前沒有接下來的預約</p>
-						<p class="mt-2 text-sm leading-7">今天的時段看起來已經清空，可以稍微喘口氣。</p>
-					</div>
-				{/if}
-			</section>
+						<div class="flex items-center justify-between gap-3">
+							<h2 class="text-xl font-semibold text-[#4c4640]">歷史</h2>
+							<span class="text-sm text-[#857c74]">{pastBookings.length} 筆</span>
+						</div>
 
-			{#if error}
-				<div
-					class="mt-4 rounded-[24px] border border-[#ecd6d2] bg-white/80 px-5 py-4 text-sm text-[#8f5f5f] shadow-sm"
-					in:fade
-				>
-					<p class="font-medium">自動更新暫時中斷</p>
-					<p class="mt-1">{error}</p>
+						{#if pastBookings.length > 0}
+							<div class="mt-4 space-y-3">
+								{#each pastBookings as record (record.id)}
+									<div
+										class="rounded-[22px] border border-[#ece3d9] bg-[#fcfaf7]/84 p-4 shadow-sm"
+										in:fade
+									>
+										<div class="flex items-start justify-between gap-3">
+											<div>
+												<h3 class="text-base font-semibold text-[#59524c]">
+													{record.customerName}
+												</h3>
+												<p class="mt-1 text-sm text-[#7f766f]">{record.serviceType}</p>
+											</div>
+											<span class="text-sm text-[#857c74]"
+												>{formatTime(record.appointmentDate)}</span
+											>
+										</div>
+										<p class="mt-3 text-sm text-[#6d655e]">
+											{formatDate(record.appointmentDate)} · {record.durationMinutes} 分鐘
+										</p>
+									</div>
+								{/each}
+							</div>
+						{:else}
+							<div
+								class="mt-4 rounded-[22px] border border-dashed border-[#ded2c6] bg-white/65 px-4 py-8 text-center text-[#7f766f]"
+							>
+								目前沒有紀錄
+							</div>
+						{/if}
+					</section>
+
+					<section
+						class="rounded-[30px] border border-white/60 bg-white/78 p-5 shadow-[0_24px_60px_rgba(74,69,64,0.08)] backdrop-blur-xl md:p-6"
+						in:fly={{ y: 18, duration: 380, easing: cubicOut }}
+					>
+						<div class="flex items-center justify-between gap-3">
+							<h2 class="text-xl font-semibold text-[#5e4e4c]">取消</h2>
+							<span class="text-sm text-[#a06f6f]">{cancelledBookings.length} 筆</span>
+						</div>
+
+						{#if cancelledBookings.length > 0}
+							<div class="mt-4 space-y-3">
+								{#each cancelledBookings as record (record.id)}
+									<div
+										class="rounded-[22px] border border-[#f0dfdb] bg-[#fbf5f4]/88 p-4 shadow-sm"
+										in:fade
+									>
+										<div class="flex items-start justify-between gap-3">
+											<div>
+												<h3 class="text-base font-semibold text-[#6a5a58] line-through">
+													{record.customerName}
+												</h3>
+												<p class="mt-1 text-sm text-[#8c7b79]">{record.serviceType}</p>
+											</div>
+											<span class="text-sm text-[#a06f6f]"
+												>{formatTime(record.appointmentDate)}</span
+											>
+										</div>
+										<p class="mt-3 text-sm text-[#7a6967]">{formatDate(record.appointmentDate)}</p>
+									</div>
+								{/each}
+							</div>
+						{:else}
+							<div
+								class="mt-4 rounded-[22px] border border-dashed border-[#e6d3cf] bg-white/65 px-4 py-8 text-center text-[#7f766f]"
+							>
+								目前沒有紀錄
+							</div>
+						{/if}
+					</section>
 				</div>
 			{/if}
-
-			<section
-				class="mt-6 rounded-[30px] border border-white/60 bg-white/74 p-6 shadow-[0_24px_60px_rgba(74,69,64,0.08)] backdrop-blur-xl"
-				in:fly={{ y: 18, duration: 350, easing: cubicOut }}
-			>
-				<div class="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-					<div>
-						<h2 class="mt-2 text-2xl font-semibold text-[#4c4640]">今天的預約</h2>
-					</div>
-					<p class="text-sm text-[#857c74]">今天還沒開始的客人會顯示在這裡。</p>
-				</div>
-
-				{#if todayBookings.length > 0}
-					<div class="mt-5 grid gap-3">
-						{#each todayBookings as record (record.id)}
-							<div
-								class="rounded-[24px] border border-[#ece3d9] bg-[linear-gradient(180deg,rgba(255,255,255,0.92),rgba(247,241,235,0.88))] p-4 shadow-sm transition-transform duration-300 hover:-translate-y-0.5"
-								in:fade
-							>
-								<div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-									<div class="flex items-start gap-4">
-										<div
-											class="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[#edf4ea] text-sm font-semibold text-[#6d7d6b]"
-										>
-											{record.customerName.charAt(0)}
-										</div>
-										<div>
-											<div class="flex flex-wrap items-center gap-2">
-												<h3 class="text-lg font-semibold text-[#47413c]">{record.customerName}</h3>
-												<span
-													class="rounded-full border border-[#dde6d8] bg-[#f3f7f1] px-2.5 py-1 text-[11px] font-semibold tracking-[0.16em] text-[#71806f]"
-												>
-													今日
-												</span>
-											</div>
-											<p class="mt-1 text-sm text-[#7a7169]">{record.serviceType}</p>
-										</div>
-									</div>
-
-									<div class="flex flex-wrap items-center gap-2 text-sm">
-										<div class="rounded-2xl bg-[#f6f1eb] px-3 py-2 text-[#5f5750]">
-											{formatTime(record.appointmentDate)} - {getEndTime(
-												record.appointmentDate,
-												record.durationMinutes
-											)}
-										</div>
-										<div class="rounded-2xl bg-[#f6f1eb] px-3 py-2 text-[#857c74]">
-											{record.durationMinutes} 分鐘
-										</div>
-									</div>
-								</div>
-							</div>
-						{/each}
-					</div>
-				{:else}
-					<div
-						class="mt-5 rounded-[24px] border border-dashed border-[#ded2c6] bg-[#fbf7f2]/80 px-5 py-10 text-center text-[#7f766f]"
-					>
-						<p class="text-lg font-medium">今天目前沒有待服務的預約</p>
-						<p class="mt-2 text-sm leading-7">你可以改看接下來的預約，或檢查歷史紀錄。</p>
-					</div>
-				{/if}
-			</section>
-
-			<section
-				class="mt-6 rounded-[30px] border border-white/60 bg-white/74 p-6 shadow-[0_24px_60px_rgba(74,69,64,0.08)] backdrop-blur-xl"
-				in:fly={{ y: 18, duration: 380, easing: cubicOut }}
-			>
-				<div class="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-					<div>
-						<h2 class="mt-2 text-2xl font-semibold text-[#4c4640]">接下來的預約</h2>
-					</div>
-					<p class="text-sm text-[#857c74]">不是今天的預約都放在這裡。</p>
-				</div>
-
-				{#if laterUpcomingBookings.length > 0}
-					<div class="mt-5 grid gap-3 lg:grid-cols-2">
-						{#each laterUpcomingBookings as record (record.id)}
-							<div
-								class="rounded-[24px] border border-[#ece3d9] bg-[#fcfaf7]/85 p-4 shadow-sm"
-								in:fade
-							>
-								<div class="flex items-start justify-between gap-3">
-									<div>
-										<p class="text-[11px] tracking-[0.22em] text-[#9b9086] uppercase">
-											{getDayLabel(record.appointmentDate)}
-										</p>
-										<h3 class="mt-2 text-lg font-semibold text-[#47413c]">{record.customerName}</h3>
-										<p class="mt-1 text-sm text-[#7a7169]">{record.serviceType}</p>
-									</div>
-									<span
-										class="rounded-full bg-[#f1ece6] px-2.5 py-1 text-[11px] font-semibold tracking-[0.16em] text-[#857c74]"
-									>
-										{formatTime(record.appointmentDate)}
-									</span>
-								</div>
-								<p class="mt-4 text-sm text-[#6d655e]">
-									{formatDate(record.appointmentDate)} · {record.durationMinutes} 分鐘 · 結束約 {getEndTime(
-										record.appointmentDate,
-										record.durationMinutes
-									)}
-								</p>
-							</div>
-						{/each}
-					</div>
-				{:else}
-					<div
-						class="mt-5 rounded-[24px] border border-dashed border-[#ded2c6] bg-[#fbf7f2]/80 px-5 py-10 text-center text-[#7f766f]"
-					>
-						<p class="text-lg font-medium">目前沒有未來排程</p>
-						<p class="mt-2 text-sm leading-7">新的預約一進來，這裡就會自動出現。</p>
-					</div>
-				{/if}
-			</section>
-
-			<div class="mt-6 grid gap-4">
-				<details class="group rounded-[26px] border border-white/60 bg-white/74 px-5 py-4 shadow-[0_20px_50px_rgba(74,69,64,0.07)] backdrop-blur-xl">
-					<summary class="flex cursor-pointer list-none items-center justify-between gap-3">
-						<div>
-							<h2 class="text-lg font-semibold text-[#4c4640]">較早的預約</h2>
-							<p class="mt-1 text-sm text-[#857c74]">時間已經過去的預約</p>
-						</div>
-						<div class="flex items-center gap-3">
-							<span class="rounded-full bg-[#f1ece6] px-3 py-1 text-xs font-medium text-[#857c74]">
-								{pastBookings.length} 筆
-							</span>
-							<span class="text-sm text-[#9b9086] transition-transform group-open:rotate-180">⌄</span>
-						</div>
-					</summary>
-
-					{#if pastBookings.length > 0}
-						<div class="mt-4 space-y-3">
-							{#each pastBookings as record (record.id)}
-								<div class="rounded-[22px] border border-[#ece3d9] bg-[#f7f2ec]/75 p-4 opacity-80" in:fade>
-									<div class="flex items-start justify-between gap-3">
-										<div>
-											<h3 class="text-base font-semibold text-[#59524c]">{record.customerName}</h3>
-											<p class="mt-1 text-sm text-[#7f766f]">{record.serviceType}</p>
-										</div>
-										<span class="rounded-full bg-white/85 px-2.5 py-1 text-[11px] font-medium text-[#857c74]">
-											{formatTime(record.appointmentDate)}
-										</span>
-									</div>
-									<p class="mt-3 text-sm text-[#6d655e]">{formatDate(record.appointmentDate)} · {record.durationMinutes} 分鐘</p>
-								</div>
-							{/each}
-						</div>
-					{:else}
-						<div class="mt-4 rounded-[24px] border border-dashed border-[#ded2c6] bg-[#fbf7f2]/80 px-5 py-8 text-center text-[#7f766f]">
-							<p class="text-base font-medium">目前還沒有歷史預約</p>
-						</div>
-					{/if}
-				</details>
-
-				<details class="group rounded-[26px] border border-white/60 bg-white/74 px-5 py-4 shadow-[0_20px_50px_rgba(74,69,64,0.07)] backdrop-blur-xl">
-					<summary class="flex cursor-pointer list-none items-center justify-between gap-3">
-						<div>
-							<h2 class="text-lg font-semibold text-[#4c4640]">已取消的預約</h2>
-							<p class="mt-1 text-sm text-[#857c74]">店家已取消或客人取消的預約</p>
-						</div>
-						<div class="flex items-center gap-3">
-							<span class="rounded-full bg-[#f7ecea] px-3 py-1 text-xs font-medium text-[#a06f6f]">
-								{cancelledBookings.length} 筆
-							</span>
-							<span class="text-sm text-[#9b9086] transition-transform group-open:rotate-180">⌄</span>
-						</div>
-					</summary>
-
-					{#if cancelledBookings.length > 0}
-						<div class="mt-4 space-y-3">
-							{#each cancelledBookings as record (record.id)}
-								<div class="rounded-[22px] border border-[#f0dfdb] bg-[#fbf5f4]/85 p-4 opacity-85" in:fade>
-									<div class="flex items-start justify-between gap-3">
-										<div>
-											<h3 class="text-base font-semibold text-[#6a5a58] line-through">{record.customerName}</h3>
-											<p class="mt-1 text-sm text-[#8c7b79]">{record.serviceType}</p>
-										</div>
-										<span class="rounded-full bg-white/90 px-2.5 py-1 text-[11px] font-medium text-[#a06f6f]">
-											已取消
-										</span>
-									</div>
-									<p class="mt-3 text-sm text-[#7a6967]">{formatDate(record.appointmentDate)} · {formatTime(record.appointmentDate)}</p>
-								</div>
-							{/each}
-						</div>
-					{:else}
-						<div class="mt-4 rounded-[24px] border border-dashed border-[#e6d3cf] bg-[#fbf7f2]/80 px-5 py-8 text-center text-[#7f766f]">
-							<p class="text-base font-medium">目前沒有取消紀錄</p>
-						</div>
-					{/if}
-				</details>
-			</div>
 		{:else}
 			<div
 				class="rounded-[32px] border border-white/60 bg-white/70 px-6 py-16 text-center shadow-[0_24px_60px_rgba(74,69,64,0.08)] backdrop-blur-xl"
