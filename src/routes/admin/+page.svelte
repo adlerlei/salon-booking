@@ -367,47 +367,40 @@
 					class="rounded-[30px] border border-white/60 bg-[linear-gradient(145deg,rgba(255,255,255,0.74),rgba(246,239,232,0.88))] p-6 shadow-[0_24px_60px_rgba(74,69,64,0.08)] backdrop-blur-xl"
 					in:fly={{ y: 18, duration: 350, easing: cubicOut }}
 				>
-					<p class="text-[11px] tracking-[0.28em] text-[#9b9086] uppercase">Today Overview</p>
 					<div class="mt-3 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
 						<div>
 							<h2
 								class="font-serif text-[30px] leading-tight text-[#453f3a]"
 								style="font-family: 'Playfair Display', serif;"
 							>
-								今天的營運節奏，一眼就看清楚
+								今天的預約重點
 							</h2>
 							<p class="mt-3 max-w-2xl text-sm leading-7 text-[#786f68]">
-								{todayHeading}。先看今天，再看接下來與歷史預約。
+								{todayHeading}。先看今天，再看接下來的預約。
 							</p>
 						</div>
 						<div
 							class="rounded-2xl border border-[#e2d7cb] bg-white/80 px-4 py-3 text-sm text-[#6a625b] shadow-sm"
 						>
-							<p class="text-[11px] tracking-[0.2em] text-[#9b9086] uppercase">自動更新</p>
-							<p class="mt-1 font-medium">每 30 秒同步一次</p>
+							<p class="font-medium">每 30 秒自動更新</p>
 						</div>
 					</div>
 
-					<div class="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+					<div class="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
 						<div class="rounded-[24px] border border-[#ece3d9] bg-white/75 p-4 shadow-sm">
 							<p class="text-xs tracking-[0.18em] text-[#9b9086]">今日預約</p>
 							<p class="mt-3 text-3xl font-semibold text-[#4c4640]">{todayOverview.total}</p>
-							<p class="mt-2 text-xs text-[#857c74]">包含取消與已過時段</p>
+							<p class="mt-2 text-xs text-[#857c74]">今天總共有幾筆預約</p>
 						</div>
 						<div class="rounded-[24px] border border-[#e3eadf] bg-[#f6faf4]/90 p-4 shadow-sm">
 							<p class="text-xs tracking-[0.18em] text-[#7f8d7d]">待服務</p>
 							<p class="mt-3 text-3xl font-semibold text-[#61705f]">{todayOverview.upcoming}</p>
-							<p class="mt-2 text-xs text-[#7d877b]">今天尚未開始的預約</p>
-						</div>
-						<div class="rounded-[24px] border border-[#e5dfd7] bg-[#f5f2ee]/90 p-4 shadow-sm">
-							<p class="text-xs tracking-[0.18em] text-[#9b9086]">已過時段</p>
-							<p class="mt-3 text-3xl font-semibold text-[#6f6760]">{todayOverview.finished}</p>
-							<p class="mt-2 text-xs text-[#857c74]">目前仍以時間自動歸類</p>
+							<p class="mt-2 text-xs text-[#7d877b]">今天還沒開始的預約</p>
 						</div>
 						<div class="rounded-[24px] border border-[#eeddd8] bg-[#fbf4f2]/90 p-4 shadow-sm">
 							<p class="text-xs tracking-[0.18em] text-[#b08080]">今日取消</p>
 							<p class="mt-3 text-3xl font-semibold text-[#9f6d6d]">{todayOverview.cancelled}</p>
-							<p class="mt-2 text-xs text-[#9b7e7e]">取消紀錄仍會保留在後台</p>
+							<p class="mt-2 text-xs text-[#9b7e7e]">今天取消的預約</p>
 						</div>
 					</div>
 				</section>
@@ -416,10 +409,9 @@
 					class="rounded-[30px] border border-white/60 bg-[linear-gradient(165deg,rgba(255,255,255,0.78),rgba(239,233,226,0.92))] p-6 shadow-[0_24px_60px_rgba(74,69,64,0.08)] backdrop-blur-xl"
 					in:fly={{ y: 24, duration: 400, easing: cubicOut }}
 				>
-					<p class="text-[11px] tracking-[0.28em] text-[#9b9086] uppercase">Booking Stats</p>
-					<h2 class="mt-3 text-2xl font-semibold text-[#4c4640]">預約統計摘要</h2>
+					<h2 class="text-2xl font-semibold text-[#4c4640]">預約統計</h2>
 					<p class="mt-2 text-sm leading-7 text-[#786f68]">
-						先看預約來客數與熱門服務項目，之後再補更精準的到店統計。
+						看今天、本週、本月有幾位客人，以及最常預約的服務。
 					</p>
 
 					{#if stats}
@@ -481,8 +473,8 @@
 						</div>
 					{/if}
 
-					<p class="mt-5 text-[11px] leading-6 tracking-[0.12em] text-[#9b9086]">
-						統計目前以非取消預約作為「預約來客數」，等手動完工狀態完成後可再改為更精準的到店數。
+					<p class="mt-5 text-xs leading-6 text-[#9b9086]">
+						這裡是依照預約資料統計，已取消的不會算進來。
 					</p>
 				</section>
 			</div>
@@ -491,7 +483,7 @@
 				class="mt-6 rounded-[30px] border border-white/60 bg-[linear-gradient(165deg,rgba(255,255,255,0.78),rgba(239,233,226,0.92))] p-6 shadow-[0_24px_60px_rgba(74,69,64,0.08)] backdrop-blur-xl"
 				in:fly={{ y: 24, duration: 400, easing: cubicOut }}
 			>
-				<p class="text-[11px] tracking-[0.28em] text-[#9b9086] uppercase">Next Guest</p>
+				<h2 class="text-2xl font-semibold text-[#4c4640]">下一位客人</h2>
 				{#if nextBooking}
 					<div class="mt-4 rounded-[26px] border border-[#e4d8cd] bg-white/80 p-5 shadow-sm">
 						<div class="flex items-start justify-between gap-4">
@@ -530,7 +522,7 @@
 					<div
 						class="mt-4 rounded-[26px] border border-dashed border-[#ddd2c7] bg-white/65 p-6 text-center text-[#7f766f]"
 					>
-						<p class="text-lg font-medium">目前沒有即將到來的預約</p>
+						<p class="text-lg font-medium">目前沒有接下來的預約</p>
 						<p class="mt-2 text-sm leading-7">今天的時段看起來已經清空，可以稍微喘口氣。</p>
 					</div>
 				{/if}
@@ -552,10 +544,9 @@
 			>
 				<div class="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
 					<div>
-						<p class="text-[11px] tracking-[0.26em] text-[#9b9086] uppercase">Today Schedule</p>
 						<h2 class="mt-2 text-2xl font-semibold text-[#4c4640]">今天的預約</h2>
 					</div>
-					<p class="text-sm text-[#857c74]">把今天還沒開始的客人放在最前面。</p>
+					<p class="text-sm text-[#857c74]">今天還沒開始的客人會顯示在這裡。</p>
 				</div>
 
 				{#if todayBookings.length > 0}
@@ -616,10 +607,9 @@
 			>
 				<div class="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
 					<div>
-						<p class="text-[11px] tracking-[0.26em] text-[#9b9086] uppercase">Upcoming Queue</p>
 						<h2 class="mt-2 text-2xl font-semibold text-[#4c4640]">接下來的預約</h2>
 					</div>
-					<p class="text-sm text-[#857c74]">明天之後的排程都放在這裡。</p>
+					<p class="text-sm text-[#857c74]">不是今天的預約都放在這裡。</p>
 				</div>
 
 				{#if laterUpcomingBookings.length > 0}
@@ -662,105 +652,82 @@
 				{/if}
 			</section>
 
-			<div class="mt-6 grid gap-6 xl:grid-cols-2">
-				<section
-					class="rounded-[30px] border border-white/60 bg-white/74 p-6 shadow-[0_24px_60px_rgba(74,69,64,0.08)] backdrop-blur-xl"
-					in:fly={{ y: 20, duration: 380, easing: cubicOut }}
-				>
-					<div class="flex items-center justify-between">
+			<div class="mt-6 grid gap-4">
+				<details class="group rounded-[26px] border border-white/60 bg-white/74 px-5 py-4 shadow-[0_20px_50px_rgba(74,69,64,0.07)] backdrop-blur-xl">
+					<summary class="flex cursor-pointer list-none items-center justify-between gap-3">
 						<div>
-							<p class="text-[11px] tracking-[0.26em] text-[#9b9086] uppercase">History</p>
-							<h2 class="mt-2 text-2xl font-semibold text-[#4c4640]">已完成</h2>
+							<h2 class="text-lg font-semibold text-[#4c4640]">較早的預約</h2>
+							<p class="mt-1 text-sm text-[#857c74]">時間已經過去的預約</p>
 						</div>
-						<span class="rounded-full bg-[#f1ece6] px-3 py-1 text-xs font-medium text-[#857c74]">
-							{pastBookings.length} 筆
-						</span>
-					</div>
-					<p class="mt-3 text-sm leading-7 text-[#857c74]">
-						目前這一區仍是依預約時間自動歸類為已完成，尚未加入手動完工功能。
-					</p>
+						<div class="flex items-center gap-3">
+							<span class="rounded-full bg-[#f1ece6] px-3 py-1 text-xs font-medium text-[#857c74]">
+								{pastBookings.length} 筆
+							</span>
+							<span class="text-sm text-[#9b9086] transition-transform group-open:rotate-180">⌄</span>
+						</div>
+					</summary>
 
 					{#if pastBookings.length > 0}
-						<div class="mt-5 space-y-3">
+						<div class="mt-4 space-y-3">
 							{#each pastBookings as record (record.id)}
-								<div
-									class="rounded-[22px] border border-[#ece3d9] bg-[#f7f2ec]/75 p-4 opacity-80"
-									in:fade
-								>
+								<div class="rounded-[22px] border border-[#ece3d9] bg-[#f7f2ec]/75 p-4 opacity-80" in:fade>
 									<div class="flex items-start justify-between gap-3">
 										<div>
 											<h3 class="text-base font-semibold text-[#59524c]">{record.customerName}</h3>
 											<p class="mt-1 text-sm text-[#7f766f]">{record.serviceType}</p>
 										</div>
-										<span
-											class="rounded-full bg-white/85 px-2.5 py-1 text-[11px] font-medium text-[#857c74]"
-										>
+										<span class="rounded-full bg-white/85 px-2.5 py-1 text-[11px] font-medium text-[#857c74]">
 											{formatTime(record.appointmentDate)}
 										</span>
 									</div>
-									<p class="mt-3 text-sm text-[#6d655e]">
-										{formatDate(record.appointmentDate)} · {record.durationMinutes} 分鐘
-									</p>
+									<p class="mt-3 text-sm text-[#6d655e]">{formatDate(record.appointmentDate)} · {record.durationMinutes} 分鐘</p>
 								</div>
 							{/each}
 						</div>
 					{:else}
-						<div
-							class="mt-5 rounded-[24px] border border-dashed border-[#ded2c6] bg-[#fbf7f2]/80 px-5 py-10 text-center text-[#7f766f]"
-						>
+						<div class="mt-4 rounded-[24px] border border-dashed border-[#ded2c6] bg-[#fbf7f2]/80 px-5 py-8 text-center text-[#7f766f]">
 							<p class="text-base font-medium">目前還沒有歷史預約</p>
 						</div>
 					{/if}
-				</section>
+				</details>
 
-				<section
-					class="rounded-[30px] border border-white/60 bg-white/74 p-6 shadow-[0_24px_60px_rgba(74,69,64,0.08)] backdrop-blur-xl"
-					in:fly={{ y: 20, duration: 420, easing: cubicOut }}
-				>
-					<div class="flex items-center justify-between">
+				<details class="group rounded-[26px] border border-white/60 bg-white/74 px-5 py-4 shadow-[0_20px_50px_rgba(74,69,64,0.07)] backdrop-blur-xl">
+					<summary class="flex cursor-pointer list-none items-center justify-between gap-3">
 						<div>
-							<p class="text-[11px] tracking-[0.26em] text-[#9b9086] uppercase">Cancelled</p>
-							<h2 class="mt-2 text-2xl font-semibold text-[#4c4640]">已取消</h2>
+							<h2 class="text-lg font-semibold text-[#4c4640]">已取消的預約</h2>
+							<p class="mt-1 text-sm text-[#857c74]">店家已取消或客人取消的預約</p>
 						</div>
-						<span class="rounded-full bg-[#f7ecea] px-3 py-1 text-xs font-medium text-[#a06f6f]">
-							{cancelledBookings.length} 筆
-						</span>
-					</div>
+						<div class="flex items-center gap-3">
+							<span class="rounded-full bg-[#f7ecea] px-3 py-1 text-xs font-medium text-[#a06f6f]">
+								{cancelledBookings.length} 筆
+							</span>
+							<span class="text-sm text-[#9b9086] transition-transform group-open:rotate-180">⌄</span>
+						</div>
+					</summary>
 
 					{#if cancelledBookings.length > 0}
-						<div class="mt-5 space-y-3">
+						<div class="mt-4 space-y-3">
 							{#each cancelledBookings as record (record.id)}
-								<div
-									class="rounded-[22px] border border-[#f0dfdb] bg-[#fbf5f4]/85 p-4 opacity-85"
-									in:fade
-								>
+								<div class="rounded-[22px] border border-[#f0dfdb] bg-[#fbf5f4]/85 p-4 opacity-85" in:fade>
 									<div class="flex items-start justify-between gap-3">
 										<div>
-											<h3 class="text-base font-semibold text-[#6a5a58] line-through">
-												{record.customerName}
-											</h3>
+											<h3 class="text-base font-semibold text-[#6a5a58] line-through">{record.customerName}</h3>
 											<p class="mt-1 text-sm text-[#8c7b79]">{record.serviceType}</p>
 										</div>
-										<span
-											class="rounded-full bg-white/90 px-2.5 py-1 text-[11px] font-medium text-[#a06f6f]"
-										>
+										<span class="rounded-full bg-white/90 px-2.5 py-1 text-[11px] font-medium text-[#a06f6f]">
 											已取消
 										</span>
 									</div>
-									<p class="mt-3 text-sm text-[#7a6967]">
-										{formatDate(record.appointmentDate)} · {formatTime(record.appointmentDate)}
-									</p>
+									<p class="mt-3 text-sm text-[#7a6967]">{formatDate(record.appointmentDate)} · {formatTime(record.appointmentDate)}</p>
 								</div>
 							{/each}
 						</div>
 					{:else}
-						<div
-							class="mt-5 rounded-[24px] border border-dashed border-[#e6d3cf] bg-[#fbf7f2]/80 px-5 py-10 text-center text-[#7f766f]"
-						>
+						<div class="mt-4 rounded-[24px] border border-dashed border-[#e6d3cf] bg-[#fbf7f2]/80 px-5 py-8 text-center text-[#7f766f]">
 							<p class="text-base font-medium">目前沒有取消紀錄</p>
 						</div>
 					{/if}
-				</section>
+				</details>
 			</div>
 		{:else}
 			<div
