@@ -3,6 +3,9 @@
 declare global {
 	interface Env {
 		LINE_SESSION_SECRET?: string;
+		LINE_CHANNEL_ACCESS_TOKEN?: string;
+		LINE_NOTIFICATION_MONTHLY_LIMIT?: string;
+		LINE_NOTIFICATION_ADMIN_URL?: string;
 	}
 
 	namespace App {

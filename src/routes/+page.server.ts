@@ -2,6 +2,7 @@ import { initDb } from '$lib/server/db';
 import { appointments } from '$lib/server/db/schema';
 import { eq } from 'drizzle-orm';
 import { verifyLineAccessToken } from '$lib/server/auth/line';
+import { notifyAdminsAboutNewBooking } from '$lib/server/notifications/line';
 
 // 服務對應的時間（分鐘）
 const serviceDurations: Record<string, number> = {
@@ -100,17 +101,19 @@ export const actions = {
 			const selectedStartMinutes = timeToMinutes(selectedTime);
 			const selectedEndMinutes = selectedStartMinutes + durationMinutes;
 
-			const hasConflict = existingAppointments.some((booking: { appointmentDate: string; durationMinutes: number }) => {
-				if (!booking.appointmentDate.startsWith(selectedDate)) return false;
+			const hasConflict = existingAppointments.some(
+				(booking: { appointmentDate: string; durationMinutes: number }) => {
+					if (!booking.appointmentDate.startsWith(selectedDate)) return false;
 
-				const bookingTime = booking.appointmentDate.split('T')[1];
-				const bookingStartMinutes = timeToMinutes(bookingTime);
-				const bookingEndMinutes = bookingStartMinutes + booking.durationMinutes;
+					const bookingTime = booking.appointmentDate.split('T')[1];
+					const bookingStartMinutes = timeToMinutes(bookingTime);
+					const bookingEndMinutes = bookingStartMinutes + booking.durationMinutes;
 
-				return (
-					selectedStartMinutes < bookingEndMinutes && selectedEndMinutes > bookingStartMinutes
-				);
-			});
+					return (
+						selectedStartMinutes < bookingEndMinutes && selectedEndMinutes > bookingStartMinutes
+					);
+				}
+			);
 
 			if (hasConflict) {
 				return {
@@ -128,6 +131,21 @@ export const actions = {
 				createdAt: new Date()
 			});
 
+			const notificationTask = notifyAdminsAboutNewBooking(platform, {
+				customerName: profile.name || 'LINE 使用者',
+				serviceType,
+				durationMinutes,
+				appointmentDate
+			}).catch((error) => {
+				console.error('Failed to notify admins about new booking', error);
+			});
+
+			if (platform?.ctx) {
+				platform.ctx.waitUntil(notificationTask);
+			} else {
+				await notificationTask;
+			}
+
 			// 回傳成功資料給前端，由前端用 goto() 做客戶端導航
 			// 這樣可以保留 LIFF 的瀏覽器上下文，讓 liff.closeWindow() 正常運作
 			return {
@@ -137,7 +155,7 @@ export const actions = {
 				name: profile.name || 'LINE 使用者',
 				duration: String(durationMinutes)
 			};
-		} catch (error) {
+		} catch {
 			return {
 				success: false,
 				message: '預約失敗，請重新登入 LINE 後再試一次'

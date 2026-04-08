@@ -6,22 +6,22 @@
 
 ## 版本資訊
 
-- 文件 / 專案版本：`v0.0.4`
-- 本次同步內容：管理後台店家視圖再簡化、改為分頁式重點資訊顯示、移除多餘提示文案
+- 文件 / 專案版本：`v0.0.5`
+- 本次同步內容：管理員新預約 LINE 通知、通知額度保護機制、管理後台文件同步更新
 
 ---
 
 ## 技術架構
 
-| 層級 | 技術 |
-|---|---|
-| 前端框架 | SvelteKit |
-| 樣式 | Tailwind CSS |
-| 後端 / Serverless | Cloudflare Pages + Workers |
-| 資料庫 | Cloudflare D1 (SQLite) |
-| ORM | Drizzle ORM |
-| 身份驗證 | LINE LIFF（LINE Front-end Framework）|
-| 部署 | Cloudflare Pages |
+| 層級              | 技術                                  |
+| ----------------- | ------------------------------------- |
+| 前端框架          | SvelteKit                             |
+| 樣式              | Tailwind CSS                          |
+| 後端 / Serverless | Cloudflare Pages + Workers            |
+| 資料庫            | Cloudflare D1 (SQLite)                |
+| ORM               | Drizzle ORM                           |
+| 身份驗證          | LINE LIFF（LINE Front-end Framework） |
+| 部署              | Cloudflare Pages                      |
 
 ---
 
@@ -69,12 +69,12 @@ npm run deploy:prod
 
 ## 頁面路由
 
-| 路徑 | 說明 |
-|---|---|
-| `/` | 預約主頁面（三步驟：選服務 → 選日期 → 選時段） |
-| `/booking-success` | 預約成功頁（✅ 已完成） |
-| `/my-bookings` | 個人預約列表 + 取消功能（✅ 已完成） |
-| `/admin` | 管理後台（✅ LINE 登入 + 管理員白名單） |
+| 路徑               | 說明                                           |
+| ------------------ | ---------------------------------------------- |
+| `/`                | 預約主頁面（三步驟：選服務 → 選日期 → 選時段） |
+| `/booking-success` | 預約成功頁（✅ 已完成）                        |
+| `/my-bookings`     | 個人預約列表 + 取消功能（✅ 已完成）           |
+| `/admin`           | 管理後台（✅ LINE 登入 + 管理員白名單）        |
 
 ---
 
@@ -127,6 +127,12 @@ npm run deploy:prod
   - 已上線每日 / 每週 / 每月「預約來客數」統計
   - 已上線各期間的服務項目摘要統計
   - 目前統計以非取消預約為基準，不包含金額統計
+- **管理員新預約通知** ✅
+  - 新預約建立成功後，會透過 LINE Messaging API 通知 `admins` 白名單中的管理員
+  - 通知會送到管理員自己的 LINE 與官方帳號聊天視窗
+  - 已加入本月通知額度檢查，避免超過免費額度後持續嘗試發送
+  - 額度接近用完時，系統會先送出最後提醒，然後暫停本月後續自動通知
+  - 需設定 `LINE_CHANNEL_ACCESS_TOKEN` 與通知相關環境變數後才會啟用
 - **資訊安全與驗證機制 (Security & Access)** ✅
   - `/admin` 頁面強制進行 LINE 登入
   - 前端透過 LIFF 取得 LINE Access Token，後端向 LINE Profile API 驗證身份
@@ -143,9 +149,9 @@ npm run deploy:prod
 
 ### 📋 規劃中（近期）
 
-- **管理員新預約通知**
-  - 目前店家需主動打開後台才知道有新預約
-  - 建議優先做 LINE Push Message 通知
+- **管理員通知優化**
+  - 目前先完成新預約通知基本版
+  - 後續可再評估是否需要加入取消通知、通知內容優化、通知對象設定
 - **後台手動管理預約**
   - 管理員可手動新增、取消、改期預約
 - **管理後台店家視圖再簡化**
@@ -198,9 +204,15 @@ npm run deploy:prod
 ```sh
 DATABASE_URL=local.db
 LINE_SESSION_SECRET=請填一組足夠長的隨機字串
+LINE_CHANNEL_ACCESS_TOKEN=LINE Messaging API Channel Access Token
+LINE_NOTIFICATION_MONTHLY_LIMIT=200
+LINE_NOTIFICATION_ADMIN_URL=https://salon-booking-a01.pages.dev/admin
 ```
 
 - `LINE_SESSION_SECRET`：後端簽署 Session Cookie 用，不要和其他專案共用
+- `LINE_CHANNEL_ACCESS_TOKEN`：用來呼叫 LINE Messaging API 發送管理員通知
+- `LINE_NOTIFICATION_MONTHLY_LIMIT`：通知安全上限；若官方 quota API 無法提供明確上限時，會以這個數字作為保護值
+- `LINE_NOTIFICATION_ADMIN_URL`：通知訊息內附上的後台連結
 
 Cloudflare Pages / Workers 也要同步設定以上變數。
 
@@ -219,6 +231,7 @@ Cloudflare Pages / Workers 也要同步設定以上變數。
 5. 他之後再用自己的 LINE 打開 `/admin`，就能進入後台
 
 ### 步驟 1：取得新管理員的 LINE ID
+
 請新管理員先透過 LINE LIFF 預約頁，用自己的 LINE 帳號**完成一次隨意的測試預約**。
 
 接著執行以下指令，查看最近預約名單，找出他的 `line_user_id`：
@@ -228,6 +241,7 @@ npx wrangler d1 execute salon-booking-db --remote --command="SELECT line_user_id
 ```
 
 你會看到最近幾筆預約資料：
+
 - `customer_name`：顧客名稱
 - `appointment_date`：預約時間
 - `line_user_id`：LINE 使用者 ID
@@ -237,6 +251,7 @@ npx wrangler d1 execute salon-booking-db --remote --command="SELECT line_user_id
 > `line_user_id` 通常會是 `U` 開頭的一長串字串。
 
 ### 步驟 2：將新管理員加入白名單
+
 拿到他的 `line_user_id` 後，執行以下指令把他加入 `admins` 資料表：
 
 ```sh
@@ -268,6 +283,7 @@ npx wrangler d1 execute salon-booking-db --remote --command="SELECT line_user_id
 3. 系統就會自動辨識他是管理員並讓他進入後台
 
 如果還是進不去，優先檢查：
+
 - 他是不是用同一個 LINE 帳號在測試
 - 你加入的 `line_user_id` 有沒有貼錯
 - 是否有多個測試帳號混在一起
@@ -381,15 +397,15 @@ wrangler d1 migrations apply salon-booking-db --remote
 
 ### 環境說明
 
-| 指令 | 用途 |
-|---|---|
-| `npm run dev` | 本地開發（Vite，無 D1 綁定）|
-| `npm run build` | 建置 Cloudflare Pages 產物 |
-| `npm run preview` | 本地模擬 Cloudflare 環境（含 D1）|
-| `npm run deploy:prod` | 直接部署到正式 Cloudflare Pages |
-| `npm run db:generate` | 產生 Drizzle migration 檔案 |
-| `npm run db:push` | 推送 schema 到本地 SQLite |
-| `wrangler d1 migrations apply ... --remote` | 套用 migration 到遠端 D1 |
+| 指令                                        | 用途                              |
+| ------------------------------------------- | --------------------------------- |
+| `npm run dev`                               | 本地開發（Vite，無 D1 綁定）      |
+| `npm run build`                             | 建置 Cloudflare Pages 產物        |
+| `npm run preview`                           | 本地模擬 Cloudflare 環境（含 D1） |
+| `npm run deploy:prod`                       | 直接部署到正式 Cloudflare Pages   |
+| `npm run db:generate`                       | 產生 Drizzle migration 檔案       |
+| `npm run db:push`                           | 推送 schema 到本地 SQLite         |
+| `wrangler d1 migrations apply ... --remote` | 套用 migration 到遠端 D1          |
 
 ---
 

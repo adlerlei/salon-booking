@@ -3,6 +3,7 @@ import { initDb } from '$lib/server/db';
 import { admins, appointments } from '$lib/server/db/schema';
 
 type AdminBookingRecord = typeof appointments.$inferSelect;
+export type AdminRecord = typeof admins.$inferSelect;
 
 type ServiceStat = {
 	serviceType: string;
@@ -63,7 +64,9 @@ const formatServiceStats = (records: AdminBookingRecord[]): ServiceStat[] => {
 
 	return [...counts.entries()]
 		.map(([serviceType, count]) => ({ serviceType, count }))
-		.sort((left, right) => right.count - left.count || left.serviceType.localeCompare(right.serviceType));
+		.sort(
+			(left, right) => right.count - left.count || left.serviceType.localeCompare(right.serviceType)
+		);
 };
 
 const buildPeriodStats = (
@@ -93,12 +96,14 @@ export const getAdminRecord = async (
 	if (!lineUserId) return null;
 
 	const db = initDb(platform);
-	const [adminRecord] = await db
-		.select()
-		.from(admins)
-		.where(eq(admins.lineUserId, lineUserId));
+	const [adminRecord] = await db.select().from(admins).where(eq(admins.lineUserId, lineUserId));
 
 	return adminRecord ?? null;
+};
+
+export const listAdminRecords = async (platform: Readonly<App.Platform> | undefined) => {
+	const db = initDb(platform);
+	return db.select().from(admins) as Promise<AdminRecord[]>;
 };
 
 export const listAdminBookings = async (platform: Readonly<App.Platform> | undefined) => {
