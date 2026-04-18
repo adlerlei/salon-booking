@@ -254,7 +254,7 @@
 								幾位一起來？
 							</h2>
 							<div class="flex gap-2">
-								{#each [1, 2, 3, 4] as n}
+								{#each [1, 2, 3, 4, 5] as n}
 									<button
 										type="button"
 										on:click={() => handlePartySizeChange(n)}

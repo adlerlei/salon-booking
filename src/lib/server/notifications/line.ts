@@ -122,7 +122,7 @@ const buildBookingMessage = (payload: BookingNotificationPayload, adminUrl: stri
 	[
 		'【新預約】',
 		payload.customerName,
-		payload.serviceType,
+		payload.serviceType.replaceAll('・', '\n'),
 		formatBookingDateTime(payload.appointmentDate),
 		`${payload.durationMinutes} 分鐘`,
 		`後台：${adminUrl}`
