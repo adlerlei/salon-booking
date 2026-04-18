@@ -15,7 +15,8 @@ const serviceDurations: Record<string, number> = {
 	男生燙髮: 120,
 	女生燙髮: 210, // 取 3.5 小時
 	'洗髮+頭皮保養': 40,
-	'洗剪+頭皮保養': 60
+	'洗剪+頭皮保養': 60,
+	護髮: 30
 };
 
 const toTaipeiNowString = () => {
@@ -55,38 +56,61 @@ export const load = async ({ platform }) => {
 	};
 };
 
+type ServiceItem = { service: string; duration: number };
+
 export const actions = {
 	default: async ({ request, platform }) => {
 		try {
 			const data = await request.formData();
 			const accessToken = data.get('accessToken') as string;
-			const serviceType = data.get('serviceType') as string;
 			const appointmentDate = data.get('appointmentDate') as string;
+			const servicesJsonStr = data.get('servicesJson') as string;
+			const partySize = parseInt((data.get('partySize') as string) || '1') || 1;
 
 			if (!accessToken) {
-				return {
-					success: false,
-					message: '缺少 LINE 驗證資訊'
-				};
+				return { success: false, message: '缺少 LINE 驗證資訊' };
 			}
 
+			if (!appointmentDate) {
+				return { success: false, message: '預約資料不完整' };
+			}
+
+			let serviceItems: ServiceItem[] = [];
+
+			if (servicesJsonStr) {
+				try {
+					serviceItems = JSON.parse(servicesJsonStr) as ServiceItem[];
+				} catch {
+					return { success: false, message: '預約資料格式錯誤' };
+				}
+			} else {
+				// 舊版相容：單服務
+				const serviceType = data.get('serviceType') as string;
+				if (!serviceType) return { success: false, message: '預約資料不完整' };
+				serviceItems = [{ service: serviceType, duration: serviceDurations[serviceType] || 60 }];
+			}
+
+			if (serviceItems.length === 0) {
+				return { success: false, message: '請至少選擇一項服務' };
+			}
+
+			// 驗證所有服務都合法
+			for (const item of serviceItems) {
+				if (!(item.service in serviceDurations)) {
+					return { success: false, message: `不支援的服務項目：${item.service}` };
+				}
+			}
+
+			const durationMinutes = serviceItems.reduce((sum, item) => sum + item.duration, 0);
+			const serviceType = serviceItems.map((item) => item.service).join('・');
+			const servicesJson = JSON.stringify(serviceItems);
+
 			const profile = await verifyLineAccessToken(accessToken);
-			const durationMinutes = serviceDurations[serviceType] || 60; // 預設 60 分鐘防呆
 			const db = initDb(platform);
 			const nowInTaipei = toTaipeiNowString();
 
-			if (!serviceType || !appointmentDate) {
-				return {
-					success: false,
-					message: '預約資料不完整'
-				};
-			}
-
 			if (appointmentDate < nowInTaipei) {
-				return {
-					success: false,
-					message: '不能預約已經過去的時段'
-				};
+				return { success: false, message: '不能預約已經過去的時段' };
 			}
 
 			const existingAppointments = await db
@@ -116,10 +140,7 @@ export const actions = {
 			);
 
 			if (hasConflict) {
-				return {
-					success: false,
-					message: '這個時段已經被預約，請重新選擇'
-				};
+				return { success: false, message: '這個時段已經被預約，請重新選擇' };
 			}
 
 			await db.insert(appointments).values({
@@ -127,12 +148,19 @@ export const actions = {
 				customerName: profile.name || 'LINE 使用者',
 				serviceType,
 				durationMinutes,
+				partySize,
+				servicesJson,
 				appointmentDate,
 				createdAt: new Date()
 			});
 
+			const notifyName =
+				partySize > 1
+					? `${profile.name || 'LINE 使用者'}（${partySize}人）`
+					: profile.name || 'LINE 使用者';
+
 			const notificationTask = notifyAdminsAboutNewBooking(platform, {
-				customerName: profile.name || 'LINE 使用者',
+				customerName: notifyName,
 				serviceType,
 				durationMinutes,
 				appointmentDate
@@ -146,14 +174,13 @@ export const actions = {
 				await notificationTask;
 			}
 
-			// 回傳成功資料給前端，由前端用 goto() 做客戶端導航
-			// 這樣可以保留 LIFF 的瀏覽器上下文，讓 liff.closeWindow() 正常運作
 			return {
 				success: true,
 				service: serviceType,
 				date: appointmentDate,
 				name: profile.name || 'LINE 使用者',
-				duration: String(durationMinutes)
+				duration: String(durationMinutes),
+				partySize: String(partySize)
 			};
 		} catch {
 			return {
