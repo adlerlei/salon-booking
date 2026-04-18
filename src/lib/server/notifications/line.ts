@@ -118,15 +118,28 @@ const sendTextPushes = async (accessToken: string, userIds: string[], text: stri
 	return results.filter((result) => result.status === 'fulfilled').length;
 };
 
-const buildBookingMessage = (payload: BookingNotificationPayload, adminUrl: string) =>
-	[
+const formatEndTime = (appointmentDate: string, durationMinutes: number) => {
+	const [datePart, timePart = '00:00'] = appointmentDate.split('T');
+	const [year, month, day] = datePart.split('-').map(Number);
+	const [hour, minute] = timePart.split(':').map(Number);
+	const end = new Date(year, month - 1, day, hour, minute + durationMinutes);
+	const h = String(end.getHours()).padStart(2, '0');
+	const m = String(end.getMinutes()).padStart(2, '0');
+	return `${h}:${m}`;
+};
+
+const buildBookingMessage = (payload: BookingNotificationPayload, adminUrl: string) => {
+	const startTime = payload.appointmentDate.split('T')[1] || '';
+	const endTime = formatEndTime(payload.appointmentDate, payload.durationMinutes);
+	return [
 		'【新預約】',
 		payload.customerName,
 		payload.serviceType.replaceAll('・', '\n'),
 		formatBookingDateTime(payload.appointmentDate),
-		`${payload.durationMinutes} 分鐘`,
+		`${startTime} ~ ${endTime}`,
 		`後台：${adminUrl}`
 	].join('\n');
+};
 
 const buildQuotaWarningMessage = (period: string, adminUrl: string) =>
 	[
