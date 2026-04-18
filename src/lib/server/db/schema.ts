@@ -12,6 +12,8 @@ export const appointments = sqliteTable('appointments', {
 	status: text('status', { enum: ['confirmed', 'cancelled'] })
 		.notNull()
 		.default('confirmed'),
+	partySize: integer('party_size').notNull().default(1),
+	servicesJson: text('services_json'), // JSON array: [{service, duration}, ...] for multi-person bookings
 	createdAt: integer('created_at', { mode: 'timestamp' }).$defaultFn(() => new Date())
 });
 

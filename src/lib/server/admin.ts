@@ -59,6 +59,17 @@ const formatServiceStats = (records: AdminBookingRecord[]): ServiceStat[] => {
 	const counts = new Map<string, number>();
 
 	for (const record of records) {
+		if (record.servicesJson) {
+			try {
+				const items = JSON.parse(record.servicesJson) as { service: string }[];
+				for (const item of items) {
+					counts.set(item.service, (counts.get(item.service) || 0) + 1);
+				}
+				continue;
+			} catch {
+				// fallthrough to serviceType
+			}
+		}
 		counts.set(record.serviceType, (counts.get(record.serviceType) || 0) + 1);
 	}
 
