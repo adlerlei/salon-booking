@@ -426,7 +426,7 @@
 									>
 										<span class="text-lg font-bold text-gray-300">{day.display.split(' ')[0]}</span>
 										<span class="mt-1 text-xs text-gray-300">{day.display.split(' ')[1]}</span>
-										<span class="mt-1 text-[10px] text-[#b08080]">{fullDayClosure.reason || '店休'}</span>
+										<span class="mt-1.5 inline-block rounded-full bg-[#f0dfdb] px-2 py-0.5 text-[10px] font-medium text-[#8c5656]">{fullDayClosure.reason || '店休'}</span>
 									</div>
 								{:else}
 									<button
@@ -444,7 +444,7 @@
 												: 'text-gray-400'}">{day.display.split(' ')[1]}</span
 										>
 										{#if timeClosures.length > 0}
-											<span class="mt-1 text-[10px] text-[#c49a6c]">部分時段休息</span>
+											<span class="mt-1.5 inline-block rounded-full bg-[#fef3e2] px-2 py-0.5 text-[10px] font-medium text-[#946b2d]">部分時段休息</span>
 										{/if}
 									</button>
 								{/if}
