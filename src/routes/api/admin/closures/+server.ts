@@ -7,7 +7,9 @@ import { getAdminRecord } from '$lib/server/admin';
 export async function GET({ platform }) {
 	const db = initDb(platform);
 	const all = await db.select().from(closures);
-	return json({ success: true, closures: all });
+	return json({ success: true, closures: all }, {
+		headers: { 'Cache-Control': 'no-store' }
+	});
 }
 
 export async function POST({ request, locals, platform }) {

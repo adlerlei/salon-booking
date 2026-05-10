@@ -58,7 +58,7 @@
 
 	const loadClosures = async () => {
 		try {
-			const res = await fetch('/api/admin/closures');
+			const res = await fetch('/api/admin/closures', { cache: 'no-store' });
 			const result = await res.json() as { success: boolean; closures?: ClosureRecord[] };
 			if (result.success) closureRecords = result.closures || [];
 		} catch {
