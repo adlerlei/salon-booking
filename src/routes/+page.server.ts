@@ -17,7 +17,7 @@ const serviceDurations: Record<string, number> = {
 	'洗髮+頭皮保養': 40,
 	'洗剪+頭皮保養': 60,
 	'護髮+洗髮': 30,
-	'護髮+剪髮+洗髮': 40
+	'護髮+剪髮+洗髮': 60
 };
 
 const toTaipeiNowString = () => {

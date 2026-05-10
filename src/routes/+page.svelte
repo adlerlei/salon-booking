@@ -62,7 +62,7 @@
 		{ name: '洗髮+頭皮保養', duration: 40, desc: '約 40 分鐘' },
 		{ name: '洗剪+頭皮保養', duration: 60, desc: '約 1 小時' },
 		{ name: '護髮+洗髮', duration: 30, desc: '約 30 分鐘' },
-		{ name: '護髮+剪髮+洗髮', duration: 40, desc: '約 40 分鐘' }
+		{ name: '護髮+剪髮+洗髮', duration: 60, desc: '約 1 小時' }
 	];
 
 	// Party size and per-person service selection
