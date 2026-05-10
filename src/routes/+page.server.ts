@@ -16,7 +16,8 @@ const serviceDurations: Record<string, number> = {
 	女生燙髮: 210, // 取 3.5 小時
 	'洗髮+頭皮保養': 40,
 	'洗剪+頭皮保養': 60,
-	護髮: 30
+	'護髮+洗髮': 30,
+	'護髮+剪髮+洗髮': 40
 };
 
 const toTaipeiNowString = () => {
