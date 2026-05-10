@@ -7,5 +7,11 @@ export const handle: Handle = async ({ event, resolve }) => {
 		event.platform?.env
 	);
 
-	return resolve(event);
+	const response = await resolve(event);
+
+	if (event.url.pathname === '/' || event.url.pathname.startsWith('/api/closures')) {
+		response.headers.set('Cache-Control', 'no-store');
+	}
+
+	return response;
 };

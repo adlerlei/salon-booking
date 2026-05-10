@@ -172,6 +172,9 @@ npm run deploy:prod
 - **伺服器端日期時區修正** ✅
   - `+page.server.ts` 的公休查詢日期改用 `toTaipeiNowString()` 取台北日期
   - 修正 UTC 與台北時間最多 8 小時落差導致跨日時公休查詢條件錯誤
+- **預約頁 Cache-Control 設定** ✅
+  - 在 `hooks.server.ts` 對預約頁 `/` 與 `/api/closures` 加上 `Cache-Control: no-store`
+  - 防止瀏覽器或 LINE WebView 快取頁面導致公休、時段資料過期
 
 ---
 
@@ -204,9 +207,7 @@ npm run deploy:prod
 
 ### 🐛 待修復
 
-- **預約頁回應缺少 `Cache-Control` 標頭**
-  - 部署後的頁面未設定 `Cache-Control`，瀏覽器或 LINE WebView 可能快取 HTML
-  - **修法**：在 `hooks.server.ts` 或頁面回應中加上 `Cache-Control: no-store`
+（目前無）
 
 ---
 
