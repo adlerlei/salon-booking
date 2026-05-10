@@ -47,6 +47,14 @@
 		} catch (err: any) {
 			error = err.message;
 		}
+
+		try {
+			const res = await fetch('/api/closures');
+			if (res.ok) {
+				const json = await res.json();
+				freshClosures = json.closures;
+			}
+		} catch {}
 	});
 
 	// Services
@@ -87,7 +95,8 @@
 
 	// Closures
 	type Closure = { date: string; startTime: string | null; endTime: string | null; reason: string | null };
-	$: closureList = (data?.closures || []) as Closure[];
+	let freshClosures: Closure[] | null = null;
+	$: closureList = (freshClosures ?? data?.closures ?? []) as Closure[];
 
 	const isFullDayClosure = (c: Closure) => !c.startTime && !c.endTime;
 

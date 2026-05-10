@@ -45,7 +45,7 @@ const timeToMinutes = (timeStr: string) => {
 
 export const load = async ({ platform }) => {
 	const db = initDb(platform);
-	const today = new Date().toISOString().split('T')[0];
+	const today = toTaipeiNowString().split('T')[0];
 
 	const [allAppointments, allClosures] = await Promise.all([
 		db
