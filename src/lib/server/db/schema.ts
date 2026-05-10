@@ -25,6 +25,20 @@ export const admins = sqliteTable('admins', {
 		.$defaultFn(() => new Date())
 });
 
+export const closures = sqliteTable('closures', {
+	id: text('id')
+		.primaryKey()
+		.$defaultFn(() => crypto.randomUUID()),
+	date: text('date').notNull(),
+	startTime: text('start_time'),
+	endTime: text('end_time'),
+	reason: text('reason'),
+	createdBy: text('created_by').notNull(),
+	createdAt: integer('created_at', { mode: 'timestamp' })
+		.notNull()
+		.$defaultFn(() => new Date())
+});
+
 export const notificationStates = sqliteTable('notification_states', {
 	key: text('key').primaryKey(),
 	period: text('period').notNull(),

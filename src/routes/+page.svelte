@@ -85,6 +85,19 @@
 			.map((s) => s!.name)
 			.join('・') || '';
 
+	// Closures
+	type Closure = { date: string; startTime: string | null; endTime: string | null; reason: string | null };
+	$: closureList = (data?.closures || []) as Closure[];
+
+	const isFullDayClosure = (c: Closure) => !c.startTime && !c.endTime;
+
+	const getDateClosures = (dateStr: string) => closureList.filter((c) => c.date === dateStr);
+
+	const getFullDayClosure = (dateStr: string) => getDateClosures(dateStr).find(isFullDayClosure);
+
+	const getTimeClosures = (dateStr: string) =>
+		getDateClosures(dateStr).filter((c) => c.startTime && c.endTime);
+
 	// Dates
 	const getNextValidDays = (count: number) => {
 		const result = [];
@@ -149,6 +162,16 @@
 			return { time: slot, available: false };
 		}
 
+		if (getFullDayClosure(selectedDate)) return { time: slot, available: false };
+
+		for (const c of getTimeClosures(selectedDate)) {
+			const cStart = timeToMinutes(c.startTime!);
+			const cEnd = timeToMinutes(c.endTime!);
+			if (slotMinutes < cEnd && endSlotMinutes > cStart) {
+				return { time: slot, available: false };
+			}
+		}
+
 		const dateAppointments =
 			data?.appointments?.filter((app: any) => app.appointmentDate.startsWith(selectedDate)) || [];
 
@@ -164,6 +187,11 @@
 
 		return { time: slot, available: true };
 	});
+
+	$: if (getFullDayClosure(selectedDate)) {
+		const firstOpen = days.find((d) => !getFullDayClosure(d.dateStr));
+		if (firstOpen) selectedDate = firstOpen.dateStr;
+	}
 
 	$: {
 		if (selectedTime && !availableSlots.some((slot) => slot.time === selectedTime && slot.available)) {
@@ -390,21 +418,36 @@
 
 						<div class="mb-8 grid grid-cols-3 gap-3">
 							{#each days as day}
-								<button
-									type="button"
-									class="flex cursor-pointer flex-col items-center justify-center rounded-2xl border p-3 transition-all duration-200
-                       {selectedDate === day.dateStr
-										? 'border-[#8F9E91] bg-[#8F9E91] text-white shadow-md'
-										: 'border-gray-200 bg-white text-gray-600 hover:border-[#8F9E91]'}"
-									on:click={() => (selectedDate = day.dateStr)}
-								>
-									<span class="text-lg font-bold">{day.display.split(' ')[0]}</span>
-									<span
-										class="mt-1 text-xs {selectedDate === day.dateStr
-											? 'text-white/80'
-											: 'text-gray-400'}">{day.display.split(' ')[1]}</span
+								{@const fullDayClosure = getFullDayClosure(day.dateStr)}
+								{@const timeClosures = getTimeClosures(day.dateStr)}
+								{#if fullDayClosure}
+									<div
+										class="flex cursor-not-allowed flex-col items-center justify-center rounded-2xl border border-gray-100 bg-gray-50 p-3 opacity-60"
 									>
-								</button>
+										<span class="text-lg font-bold text-gray-300">{day.display.split(' ')[0]}</span>
+										<span class="mt-1 text-xs text-gray-300">{day.display.split(' ')[1]}</span>
+										<span class="mt-1 text-[10px] text-[#b08080]">{fullDayClosure.reason || '店休'}</span>
+									</div>
+								{:else}
+									<button
+										type="button"
+										class="flex cursor-pointer flex-col items-center justify-center rounded-2xl border p-3 transition-all duration-200
+										{selectedDate === day.dateStr
+											? 'border-[#8F9E91] bg-[#8F9E91] text-white shadow-md'
+											: 'border-gray-200 bg-white text-gray-600 hover:border-[#8F9E91]'}"
+										on:click={() => (selectedDate = day.dateStr)}
+									>
+										<span class="text-lg font-bold">{day.display.split(' ')[0]}</span>
+										<span
+											class="mt-1 text-xs {selectedDate === day.dateStr
+												? 'text-white/80'
+												: 'text-gray-400'}">{day.display.split(' ')[1]}</span
+										>
+										{#if timeClosures.length > 0}
+											<span class="mt-1 text-[10px] text-[#c49a6c]">部分時段休息</span>
+										{/if}
+									</button>
+								{/if}
 							{/each}
 						</div>
 

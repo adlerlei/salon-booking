@@ -1,6 +1,6 @@
 import { initDb } from '$lib/server/db';
-import { appointments } from '$lib/server/db/schema';
-import { eq } from 'drizzle-orm';
+import { appointments, closures } from '$lib/server/db/schema';
+import { eq, gte } from 'drizzle-orm';
 import { verifyLineAccessToken } from '$lib/server/auth/line';
 import { notifyAdminsAboutNewBooking } from '$lib/server/notifications/line';
 
@@ -45,15 +45,30 @@ const timeToMinutes = (timeStr: string) => {
 
 export const load = async ({ platform }) => {
 	const db = initDb(platform);
-	const allAppointments = await db
-		.select({
-			appointmentDate: appointments.appointmentDate,
-			durationMinutes: appointments.durationMinutes
-		})
-		.from(appointments)
-		.where(eq(appointments.status, 'confirmed'));
+	const today = new Date().toISOString().split('T')[0];
+
+	const [allAppointments, allClosures] = await Promise.all([
+		db
+			.select({
+				appointmentDate: appointments.appointmentDate,
+				durationMinutes: appointments.durationMinutes
+			})
+			.from(appointments)
+			.where(eq(appointments.status, 'confirmed')),
+		db
+			.select({
+				date: closures.date,
+				startTime: closures.startTime,
+				endTime: closures.endTime,
+				reason: closures.reason
+			})
+			.from(closures)
+			.where(gte(closures.date, today))
+	]);
+
 	return {
-		appointments: allAppointments
+		appointments: allAppointments,
+		closures: allClosures
 	};
 };
 
@@ -114,6 +129,26 @@ export const actions = {
 				return { success: false, message: '不能預約已經過去的時段' };
 			}
 
+			const [selectedDate, selectedTime] = appointmentDate.split('T');
+			const selectedStartMinutes = timeToMinutes(selectedTime);
+			const selectedEndMinutes = selectedStartMinutes + durationMinutes;
+
+			const dateClosures = await db
+				.select({ date: closures.date, startTime: closures.startTime, endTime: closures.endTime })
+				.from(closures)
+				.where(eq(closures.date, selectedDate));
+
+			const closureBlocked = dateClosures.some((c) => {
+				if (!c.startTime || !c.endTime) return true;
+				const cStart = timeToMinutes(c.startTime);
+				const cEnd = timeToMinutes(c.endTime);
+				return selectedStartMinutes < cEnd && selectedEndMinutes > cStart;
+			});
+
+			if (closureBlocked) {
+				return { success: false, message: '該時段為公休時間，無法預約' };
+			}
+
 			const existingAppointments = await db
 				.select({
 					appointmentDate: appointments.appointmentDate,
@@ -121,10 +156,6 @@ export const actions = {
 				})
 				.from(appointments)
 				.where(eq(appointments.status, 'confirmed'));
-
-			const [selectedDate, selectedTime] = appointmentDate.split('T');
-			const selectedStartMinutes = timeToMinutes(selectedTime);
-			const selectedEndMinutes = selectedStartMinutes + durationMinutes;
 
 			const hasConflict = existingAppointments.some(
 				(booking: { appointmentDate: string; durationMinutes: number }) => {

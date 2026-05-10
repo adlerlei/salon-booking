@@ -2,7 +2,7 @@
 	import { resolve } from '$app/paths';
 	import { goto } from '$app/navigation';
 	import { cubicOut } from 'svelte/easing';
-	import { fade, fly, scale } from 'svelte/transition';
+	import { fade, fly, scale, slide } from 'svelte/transition';
 	import { onDestroy, onMount } from 'svelte';
 	import type { PageData } from './$types';
 
@@ -24,12 +24,21 @@
 		weekday: string;
 		records: BookingRecord[];
 	};
-	type AdminTab = 'agenda' | 'stats' | 'records';
+	type AdminTab = 'agenda' | 'stats' | 'records' | 'closures';
+	type ClosureRecord = {
+		id: string;
+		date: string;
+		startTime: string | null;
+		endTime: string | null;
+		reason: string | null;
+		createdBy: string;
+	};
 
 	const liffId = '2009342816-q0rukZhq';
 	let authState = $state<AuthState>('needs-session');
 	let records = $state<BookingRecord[]>([]);
 	let stats = $state<DashboardStats | null>(null);
+	let closureRecords = $state<ClosureRecord[]>([]);
 	let loading = $state(false);
 	let syncingSession = $state(false);
 	let error = $state('');
@@ -37,6 +46,81 @@
 	let interval: ReturnType<typeof setInterval> | null = null;
 	let isMounted = $state(false);
 	let activeTab = $state<AdminTab>('agenda');
+
+	// Closure form state
+	let closureDate = $state('');
+	let closureIsFullDay = $state(true);
+	let closureStartTime = $state('11:00');
+	let closureEndTime = $state('20:00');
+	let closureReason = $state('');
+	let closureSubmitting = $state(false);
+	let closureError = $state('');
+
+	const loadClosures = async () => {
+		try {
+			const res = await fetch('/api/admin/closures');
+			const result = await res.json() as { success: boolean; closures?: ClosureRecord[] };
+			if (result.success) closureRecords = result.closures || [];
+		} catch {
+			// silent
+		}
+	};
+
+	const addClosure = async () => {
+		if (!closureDate) { closureError = '請選擇日期'; return; }
+		closureSubmitting = true;
+		closureError = '';
+		try {
+			const body: Record<string, string> = { date: closureDate };
+			if (!closureIsFullDay) {
+				body.startTime = closureStartTime;
+				body.endTime = closureEndTime;
+			}
+			if (closureReason.trim()) body.reason = closureReason.trim();
+
+			const res = await fetch('/api/admin/closures', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify(body)
+			});
+			const result = await res.json() as { success: boolean; message?: string; closures?: ClosureRecord[] };
+			if (!result.success) { closureError = result.message || '新增失敗'; return; }
+			closureRecords = result.closures || [];
+			closureDate = '';
+			closureReason = '';
+			closureIsFullDay = true;
+		} catch {
+			closureError = '新增失敗，請稍後再試';
+		} finally {
+			closureSubmitting = false;
+		}
+	};
+
+	const deleteClosure = async (id: string) => {
+		try {
+			const res = await fetch('/api/admin/closures', {
+				method: 'DELETE',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ id })
+			});
+			const result = await res.json() as { success: boolean; closures?: ClosureRecord[] };
+			if (result.success) closureRecords = result.closures || [];
+		} catch {
+			// silent
+		}
+	};
+
+	const upcomingClosures = $derived(
+		closureRecords
+			.filter((c) => c.date >= new Date().toISOString().split('T')[0])
+			.sort((a, b) => a.date.localeCompare(b.date) || (a.startTime || '').localeCompare(b.startTime || ''))
+	);
+
+	const pastClosures = $derived(
+		closureRecords
+			.filter((c) => c.date < new Date().toISOString().split('T')[0])
+			.sort((a, b) => b.date.localeCompare(a.date))
+	);
 
 	const parseDateTime = (dateTime: string) => {
 		const [datePart, timePart = '00:00'] = dateTime.split('T');
@@ -262,6 +346,7 @@
 
 		if (authState === 'authorized') {
 			startPolling();
+			loadClosures();
 			return;
 		}
 
@@ -449,6 +534,17 @@
 						onclick={() => (activeTab = 'records')}
 					>
 						紀錄 {pastBookings.length + cancelledBookings.length}
+					</button>
+					<button
+						type="button"
+						class={`shrink-0 rounded-full px-4 py-2 text-sm font-medium shadow-sm transition-colors ${
+							activeTab === 'closures'
+								? 'bg-[#8F9E91] text-white'
+								: 'border border-[#dfd3c8] bg-white/82 text-[#5f5750]'
+						}`}
+						onclick={() => (activeTab = 'closures')}
+					>
+						公休
 					</button>
 				</div>
 
@@ -700,6 +796,159 @@
 						{/if}
 					</section>
 				</div>
+			{:else if activeTab === 'closures'}
+				<section
+					class="mt-6 rounded-[30px] border border-white/60 bg-white/78 p-5 shadow-[0_24px_60px_rgba(74,69,64,0.08)] backdrop-blur-xl md:p-6"
+					in:fly={{ y: 18, duration: 350, easing: cubicOut }}
+				>
+					<h2 class="text-xl font-semibold text-[#4c4640]">新增公休</h2>
+
+					<div class="mt-4 space-y-4">
+						<label class="block">
+							<span class="text-sm font-medium text-[#5c554f]">日期</span>
+							<input
+								type="date"
+								bind:value={closureDate}
+								min={new Date().toISOString().split('T')[0]}
+								class="mt-1 w-full rounded-xl border border-[#dfd3c8] bg-white px-4 py-3 text-[#2C302E] focus:border-[#8F9E91] focus:outline-none"
+							/>
+						</label>
+
+						<div>
+							<label class="flex items-center gap-3 text-sm font-medium text-[#5c554f]">
+								<input
+									type="checkbox"
+									bind:checked={closureIsFullDay}
+									class="h-4 w-4 rounded accent-[#8F9E91]"
+								/>
+								整天公休
+							</label>
+						</div>
+
+						{#if !closureIsFullDay}
+							<div class="grid grid-cols-2 gap-3" in:slide={{ duration: 200 }}>
+								<label class="block">
+									<span class="text-sm font-medium text-[#5c554f]">開始時間</span>
+									<input
+										type="time"
+										bind:value={closureStartTime}
+										class="mt-1 w-full rounded-xl border border-[#dfd3c8] bg-white px-4 py-3 text-[#2C302E] focus:border-[#8F9E91] focus:outline-none"
+									/>
+								</label>
+								<label class="block">
+									<span class="text-sm font-medium text-[#5c554f]">結束時間</span>
+									<input
+										type="time"
+										bind:value={closureEndTime}
+										class="mt-1 w-full rounded-xl border border-[#dfd3c8] bg-white px-4 py-3 text-[#2C302E] focus:border-[#8F9E91] focus:outline-none"
+									/>
+								</label>
+							</div>
+						{/if}
+
+						<label class="block">
+							<span class="text-sm font-medium text-[#5c554f]">原因（選填，客人可見）</span>
+							<input
+								type="text"
+								bind:value={closureReason}
+								placeholder="例如：老闆出國、店面整修"
+								class="mt-1 w-full rounded-xl border border-[#dfd3c8] bg-white px-4 py-3 text-[#2C302E] placeholder:text-[#c4b8ac] focus:border-[#8F9E91] focus:outline-none"
+							/>
+						</label>
+
+						{#if closureError}
+							<p class="text-sm text-[#a06f6f]">{closureError}</p>
+						{/if}
+
+						<button
+							type="button"
+							onclick={addClosure}
+							disabled={closureSubmitting || !closureDate}
+							class="w-full rounded-xl bg-[#8F9E91] px-6 py-3 font-medium text-white shadow-sm transition-all hover:bg-[#7A8A7C] disabled:cursor-not-allowed disabled:opacity-50"
+						>
+							{closureSubmitting ? '新增中...' : '新增公休'}
+						</button>
+					</div>
+				</section>
+
+				<section
+					class="mt-6 rounded-[30px] border border-white/60 bg-white/78 p-5 shadow-[0_24px_60px_rgba(74,69,64,0.08)] backdrop-blur-xl md:p-6"
+					in:fly={{ y: 18, duration: 380, easing: cubicOut }}
+				>
+					<h2 class="text-xl font-semibold text-[#4c4640]">已設定的公休</h2>
+
+					{#if upcomingClosures.length > 0}
+						<div class="mt-4 space-y-3">
+							{#each upcomingClosures as closure (closure.id)}
+								<div
+									class="flex items-center justify-between rounded-[22px] border border-[#ece3d9] bg-[#fcfaf7]/84 p-4 shadow-sm"
+									in:fade
+								>
+									<div>
+										<p class="text-sm font-semibold text-[#47413c]">
+											{closure.date}
+											{#if closure.startTime && closure.endTime}
+												<span class="font-normal text-[#7a7169]">{closure.startTime}～{closure.endTime}</span>
+											{:else}
+												<span class="font-normal text-[#b08080]">整天</span>
+											{/if}
+										</p>
+										{#if closure.reason}
+											<p class="mt-1 text-xs text-[#7a7169]">{closure.reason}</p>
+										{/if}
+									</div>
+									<button
+										type="button"
+										onclick={() => deleteClosure(closure.id)}
+										class="shrink-0 rounded-lg border border-[#e6d3cf] px-3 py-1.5 text-xs font-medium text-[#a06f6f] transition-colors hover:bg-[#fbefed]"
+									>
+										刪除
+									</button>
+								</div>
+							{/each}
+						</div>
+					{:else}
+						<div
+							class="mt-4 rounded-[22px] border border-dashed border-[#ded2c6] bg-white/65 px-4 py-8 text-center text-[#7f766f]"
+						>
+							目前沒有設定公休
+						</div>
+					{/if}
+
+					{#if pastClosures.length > 0}
+						<div class="mt-6">
+							<p class="text-sm font-medium text-[#9b9086]">已過期</p>
+							<div class="mt-2 space-y-2">
+								{#each pastClosures as closure (closure.id)}
+									<div
+										class="flex items-center justify-between rounded-xl border border-[#ece3d9] bg-[#f9f6f3]/60 px-4 py-3 opacity-60"
+									>
+										<div>
+											<p class="text-sm text-[#7a7169]">
+												{closure.date}
+												{#if closure.startTime && closure.endTime}
+													{closure.startTime}～{closure.endTime}
+												{:else}
+													整天
+												{/if}
+											</p>
+											{#if closure.reason}
+												<p class="text-xs text-[#9b9086]">{closure.reason}</p>
+											{/if}
+										</div>
+										<button
+											type="button"
+											onclick={() => deleteClosure(closure.id)}
+											class="shrink-0 text-xs text-[#b09090] hover:text-[#a06f6f]"
+										>
+											刪除
+										</button>
+									</div>
+								{/each}
+							</div>
+						</div>
+					{/if}
+				</section>
 			{/if}
 		{:else}
 			<div
