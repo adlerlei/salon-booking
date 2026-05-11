@@ -171,11 +171,16 @@
 			return { time: slot, available: false };
 		}
 
-		if (getFullDayClosure(selectedDate)) return { time: slot, available: false };
+		const dateClosures = closureList.filter((c) => c.date === selectedDate);
 
-		for (const c of getTimeClosures(selectedDate)) {
-			const cStart = timeToMinutes(c.startTime!);
-			const cEnd = timeToMinutes(c.endTime!);
+		if (dateClosures.some((c) => !c.startTime && !c.endTime)) {
+			return { time: slot, available: false };
+		}
+
+		for (const c of dateClosures) {
+			if (!c.startTime || !c.endTime) continue;
+			const cStart = timeToMinutes(c.startTime);
+			const cEnd = timeToMinutes(c.endTime);
 			if (slotMinutes < cEnd && endSlotMinutes > cStart) {
 				return { time: slot, available: false };
 			}
@@ -197,8 +202,8 @@
 		return { time: slot, available: true };
 	});
 
-	$: if (getFullDayClosure(selectedDate)) {
-		const firstOpen = days.find((d) => !getFullDayClosure(d.dateStr));
+	$: if (closureList.some((c) => c.date === selectedDate && !c.startTime && !c.endTime)) {
+		const firstOpen = days.find((d) => !closureList.some((c) => c.date === d.dateStr && !c.startTime && !c.endTime));
 		if (firstOpen) selectedDate = firstOpen.dateStr;
 	}
 
