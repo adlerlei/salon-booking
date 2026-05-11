@@ -534,7 +534,7 @@
 													{fullClosure ? 'bg-[#fdf5f3]' : sunday ? 'bg-gray-50' : ''} cursor-not-allowed opacity-40">
 													<span class="{sunday ? 'text-[#c08080]' : 'text-gray-300'}">{day}</span>
 													{#if fullClosure}
-														<span class="absolute -bottom-0.5 text-[7px] leading-none text-[#8c5656]">休</span>
+														<span class="absolute bottom-0.5 text-[7px] leading-none text-[#8c5656]">休</span>
 													{/if}
 												</div>
 											{:else}
@@ -547,7 +547,7 @@
 															: 'text-[#4c4640] hover:bg-[#f5f0eb]'}">
 													<span>{day}</span>
 													{#if hasTimeClosure}
-														<span class="absolute -bottom-0.5 text-[7px] leading-none {selectedDate === ds ? 'text-white/70' : 'text-[#946b2d]'}">部分休</span>
+														<span class="absolute bottom-0.5 text-[7px] leading-none {selectedDate === ds ? 'text-white/70' : 'text-[#946b2d]'}">部分休</span>
 													{/if}
 												</button>
 											{/if}
