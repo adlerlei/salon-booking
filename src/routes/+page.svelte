@@ -12,7 +12,6 @@
 	let error = '';
 	let isSubmitting = false;
 
-	// 表單送出後用 goto 客戶端導航，保留 LIFF 上下文
 	const handleEnhance = () => {
 		isSubmitting = true;
 		return async ({ result }: { result: any }) => {
@@ -22,10 +21,9 @@
 					service: d.service,
 					date: d.date,
 					name: d.name,
-					duration: d.duration
+					duration: d.duration,
+					partySize: d.partySize || '1'
 				});
-				// 用 goto 做客戶端導航，不會重新載入整個頁面
-				// 這樣 LIFF 的瀏覽器上下文才不會斷掉
 				await goto(`/booking-success?${params.toString()}`);
 			} else {
 				error = result.data?.message || '預約失敗，請稍後再試。';
@@ -36,7 +34,6 @@
 
 	onMount(async () => {
 		try {
-			// Dynamically import LIFF to prevent SSR issues instead of disabling SSR completely
 			const liffModule = await import('@line/liff');
 			const liff = liffModule.default;
 
@@ -50,31 +47,72 @@
 		} catch (err: any) {
 			error = err.message;
 		}
+
+		try {
+			const res = await fetch('/api/closures');
+			if (res.ok) {
+				const json = await res.json();
+				freshClosures = json.closures;
+			}
+		} catch {}
 	});
 
-	// Services and Durations
+	// Services
 	const services = [
-		{ name: '男生單剪', duration: 30, desc: '約 20 分鐘' },
+		{ name: '男生單剪', duration: 20, desc: '約 20 分鐘' },
 		{ name: '女生單剪', duration: 30, desc: '約 30 分鐘' },
 		{ name: '男生洗剪', duration: 30, desc: '約 30 分鐘' },
-		{ name: '女生洗剪', duration: 60, desc: '約 50 分鐘' },
+		{ name: '女生洗剪', duration: 50, desc: '約 50 分鐘' },
 		{ name: '男生染髮', duration: 120, desc: '約 2 小時' },
 		{ name: '女生染髮', duration: 150, desc: '約 2~3 小時' },
 		{ name: '男生燙髮', duration: 120, desc: '約 2 小時' },
 		{ name: '女生燙髮', duration: 210, desc: '約 3~4 小時' },
-		{ name: '洗髮+頭皮保養', duration: 60, desc: '約 40 分鐘' },
-		{ name: '洗剪+頭皮保養', duration: 60, desc: '約 1 小時' }
+		{ name: '洗髮+頭皮保養', duration: 40, desc: '約 40 分鐘' },
+		{ name: '洗剪+頭皮保養', duration: 60, desc: '約 1 小時' },
+		{ name: '護髮+洗髮', duration: 30, desc: '約 30 分鐘' },
+		{ name: '護髮+剪髮+洗髮', duration: 60, desc: '約 1 小時' }
 	];
 
-	let selectedService: any = null;
+	// Party size and per-person service selection
+	let partySize = 1;
+	let selectedServices: (typeof services[0] | null)[] = [null];
 
-	// Dates (Generate next 7 valid business days, skipping Sundays)
+	const handlePartySizeChange = (n: number) => {
+		partySize = n;
+		selectedServices = Array(n).fill(null);
+	};
+
+	$: allServicesSelected = selectedServices.every((s) => s !== null);
+	$: totalDuration = selectedServices.reduce((sum, s) => sum + (s?.duration || 0), 0);
+	$: servicesJsonValue = allServicesSelected
+		? JSON.stringify(selectedServices.map((s) => ({ service: s!.name, duration: s!.duration })))
+		: '';
+	$: serviceSummary =
+		selectedServices
+			.filter((s) => s !== null)
+			.map((s) => s!.name)
+			.join('・') || '';
+
+	// Closures
+	type Closure = { date: string; startTime: string | null; endTime: string | null; reason: string | null };
+	let freshClosures: Closure[] | null = null;
+	$: closureList = (freshClosures ?? data?.closures ?? []) as Closure[];
+
+	const isFullDayClosure = (c: Closure) => !c.startTime && !c.endTime;
+
+	const getDateClosures = (dateStr: string) => closureList.filter((c) => c.date === dateStr);
+
+	const getFullDayClosure = (dateStr: string) => getDateClosures(dateStr).find(isFullDayClosure);
+
+	const getTimeClosures = (dateStr: string) =>
+		getDateClosures(dateStr).filter((c) => c.startTime && c.endTime);
+
+	// Dates
 	const getNextValidDays = (count: number) => {
 		const result = [];
 		let d = new Date();
 		while (result.length < count) {
 			if (d.getDay() !== 0) {
-				// If not Sunday
 				const year = d.getFullYear();
 				const month = String(d.getMonth() + 1).padStart(2, '0');
 				const day = String(d.getDate()).padStart(2, '0');
@@ -95,11 +133,8 @@
 
 	let selectedDate = days[0].dateStr;
 	let selectedTime = '';
-
-	// UI State
 	let step = 1;
 
-	// Generate All Slots (11:00 to 20:00)
 	const generateSlots = () => {
 		const slots = [];
 		for (let hour = 11; hour < 20; hour++) {
@@ -112,42 +147,40 @@
 
 	const getCurrentDateTime = () => {
 		const now = new Date();
-		const year = now.getFullYear();
-		const month = String(now.getMonth() + 1).padStart(2, '0');
-		const day = String(now.getDate()).padStart(2, '0');
-		const hours = String(now.getHours()).padStart(2, '0');
-		const minutes = String(now.getMinutes()).padStart(2, '0');
-
 		return {
-			date: `${year}-${month}-${day}`,
-			time: `${hours}:${minutes}`
+			date: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`,
+			time: `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
 		};
 	};
 
-	// Helper to convert HH:MM to minutes since midnight
 	const timeToMinutes = (timeStr: string) => {
 		const [h, m] = timeStr.split(':').map(Number);
 		return h * 60 + m;
 	};
 
-	// Helper: check if a slot is available
 	$: availableSlots = allSlots.map((slot) => {
-		if (!selectedService) return { time: slot, available: false };
+		if (!allServicesSelected) return { time: slot, available: false };
 
 		const slotMinutes = timeToMinutes(slot);
-		const requiredDuration = selectedService.duration;
-		const endSlotMinutes = slotMinutes + requiredDuration;
+		const endSlotMinutes = slotMinutes + totalDuration;
 		const now = getCurrentDateTime();
 
-		// 1. Check if it exceeds closing time (20:00 = 1200 mins)
 		if (endSlotMinutes > 20 * 60) return { time: slot, available: false };
 
-		// 1.5. 今日不可預約已經過去的時段
 		if (selectedDate === now.date && slotMinutes <= timeToMinutes(now.time)) {
 			return { time: slot, available: false };
 		}
 
-		// 2. Check collisions with existing appointments on the selected date
+		if (getFullDayClosure(selectedDate)) return { time: slot, available: false };
+
+		for (const c of getTimeClosures(selectedDate)) {
+			const cStart = timeToMinutes(c.startTime!);
+			const cEnd = timeToMinutes(c.endTime!);
+			if (slotMinutes < cEnd && endSlotMinutes > cStart) {
+				return { time: slot, available: false };
+			}
+		}
+
 		const dateAppointments =
 			data?.appointments?.filter((app: any) => app.appointmentDate.startsWith(selectedDate)) || [];
 
@@ -156,8 +189,6 @@
 			const appStartMins = timeToMinutes(appTime);
 			const appEndMins = appStartMins + app.durationMinutes;
 
-			// Collision condition:
-			// Proposed slot starts before existing ends AND proposed ends after existing starts
 			if (slotMinutes < appEndMins && endSlotMinutes > appStartMins) {
 				return { time: slot, available: false };
 			}
@@ -166,10 +197,13 @@
 		return { time: slot, available: true };
 	});
 
+	$: if (getFullDayClosure(selectedDate)) {
+		const firstOpen = days.find((d) => !getFullDayClosure(d.dateStr));
+		if (firstOpen) selectedDate = firstOpen.dateStr;
+	}
+
 	$: {
-		if (!selectedTime) {
-			// no-op
-		} else if (!availableSlots.some((slot) => slot.time === selectedTime && slot.available)) {
+		if (selectedTime && !availableSlots.some((slot) => slot.time === selectedTime && slot.available)) {
 			selectedTime = '';
 		}
 	}
@@ -178,7 +212,6 @@
 <div
 	class="min-h-screen bg-[#F9F8F6] pb-20 font-sans text-[#2C302E] selection:bg-[#8F9E91] selection:text-white"
 >
-	<!-- Header -->
 	<header class="sticky top-0 z-10 flex items-center justify-between bg-white px-6 py-6 shadow-sm">
 		<h1
 			class="font-serif text-2xl font-semibold tracking-wide"
@@ -215,14 +248,10 @@
 				<p>LINE 登入載入中...</p>
 			</div>
 		{:else}
-
-			<form
-				method="POST"
-				use:enhance={handleEnhance}
-				class="space-y-8"
-			>
+			<form method="POST" use:enhance={handleEnhance} class="space-y-8">
 				<input type="hidden" name="accessToken" value={accessToken} />
-				<input type="hidden" name="serviceType" value={selectedService?.name || ''} />
+				<input type="hidden" name="partySize" value={partySize} />
+				<input type="hidden" name="servicesJson" value={servicesJsonValue} />
 				<input type="hidden" name="appointmentDate" value="{selectedDate}T{selectedTime}" />
 
 				<!-- Progress Indicator -->
@@ -253,44 +282,99 @@
 					{/each}
 				</div>
 
-				<!-- Step 1: Services -->
+				<!-- Step 1: Party size + Services -->
 				{#if step === 1}
 					<div in:fade={{ duration: 200 }}>
-						<h2 class="mb-4 flex items-center gap-2 text-lg font-semibold">
-							<span class="inline-block h-5 w-1 rounded-full bg-[#8F9E91]"></span>
-							請選擇服務項目
-						</h2>
-						<div class="grid grid-cols-2 gap-3">
-							{#each services as item}
-								<label class="group cursor-pointer">
-									<input
-										type="radio"
-										name="_service"
-										value={item}
-										class="peer hidden"
-										on:change={() => (selectedService = item)}
-										checked={selectedService?.name === item.name}
-									/>
-									<div
-										class="flex min-h-[5rem] flex-col justify-center rounded-2xl border
-                              border-gray-200 bg-white p-4 text-center
-                              transition-all duration-200 peer-checked:border-[#8F9E91] peer-checked:bg-[#8F9E91] peer-checked:text-white peer-checked:shadow-md hover:border-[#8F9E91]"
+						<!-- Party size selector -->
+						<div class="mb-6">
+							<h2 class="mb-3 flex items-center gap-2 text-lg font-semibold">
+								<span class="inline-block h-5 w-1 rounded-full bg-[#8F9E91]"></span>
+								幾位一起來？
+							</h2>
+							<div class="flex gap-2">
+								{#each [1, 2, 3, 4, 5] as n}
+									<button
+										type="button"
+										on:click={() => handlePartySizeChange(n)}
+										class="flex-1 rounded-xl border py-2.5 text-sm font-medium transition-all duration-200 {partySize ===
+										n
+											? 'border-[#8F9E91] bg-[#8F9E91] text-white shadow-md'
+											: 'border-gray-200 bg-white text-gray-600 hover:border-[#8F9E91]'}"
 									>
-										<span class="font-medium">{item.name}</span>
-										<span
-											class="mt-1 text-xs {selectedService?.name === item.name
-												? 'text-white/80'
-												: 'text-gray-400 group-hover:text-gray-500'}">{item.desc}</span
-										>
-									</div>
-								</label>
-							{/each}
+										{n}人
+									</button>
+								{/each}
+							</div>
 						</div>
 
-						<div class="mt-8 flex justify-end">
+						<!-- Service selection per person -->
+						{#each Array(partySize) as _, i}
+							<div class="mb-6" in:slide={{ duration: 200 }}>
+								{#if partySize > 1}
+									<h3 class="mb-3 flex items-center gap-2 text-base font-semibold text-[#4c4640]">
+										<span
+											class="flex h-6 w-6 items-center justify-center rounded-full bg-[#f1ebe4] text-xs font-bold text-[#8F9E91]"
+										>{i + 1}</span
+										>
+										第 {i + 1} 位
+										{#if selectedServices[i]}
+											<span class="ml-auto text-xs font-normal text-[#8F9E91]"
+												>已選：{selectedServices[i]!.name}</span
+											>
+										{/if}
+									</h3>
+								{:else}
+									<h2 class="mb-4 flex items-center gap-2 text-lg font-semibold">
+										<span class="inline-block h-5 w-1 rounded-full bg-[#8F9E91]"></span>
+										請選擇服務項目
+									</h2>
+								{/if}
+
+								<div class="grid grid-cols-2 gap-3">
+									{#each services as item}
+										<label class="group cursor-pointer">
+											<input
+												type="radio"
+												name="_service_{i}"
+												value={item.name}
+												class="peer hidden"
+												on:change={() => {
+													selectedServices[i] = item;
+													selectedServices = [...selectedServices];
+												}}
+												checked={selectedServices[i]?.name === item.name}
+											/>
+											<div
+												class="flex min-h-[5rem] flex-col justify-center rounded-2xl border
+                              border-gray-200 bg-white p-4 text-center
+                              transition-all duration-200 peer-checked:border-[#8F9E91] peer-checked:bg-[#8F9E91] peer-checked:text-white peer-checked:shadow-md hover:border-[#8F9E91]"
+											>
+												<span class="font-medium">{item.name}</span>
+												<span
+													class="mt-1 text-xs {selectedServices[i]?.name === item.name
+														? 'text-white/80'
+														: 'text-gray-400 group-hover:text-gray-500'}">{item.desc}</span
+												>
+											</div>
+										</label>
+									{/each}
+								</div>
+							</div>
+						{/each}
+
+						{#if allServicesSelected && partySize > 1}
+							<div
+								class="mb-4 rounded-2xl border border-[#e3eadf] bg-[#f6faf4]/92 px-4 py-3 text-sm text-[#61705f]"
+								in:fade={{ duration: 150 }}
+							>
+								共 {partySize} 人・預計 {totalDuration} 分鐘
+							</div>
+						{/if}
+
+						<div class="mt-2 flex justify-end">
 							<button
 								type="button"
-								disabled={!selectedService}
+								disabled={!allServicesSelected}
 								on:click={() => {
 									step = 2;
 									window.scrollTo(0, 0);
@@ -322,32 +406,57 @@
 						</div>
 
 						<div
-							class="mb-6 flex items-center justify-between rounded-2xl border border-gray-100 bg-white p-4 shadow-sm"
+							class="mb-6 rounded-2xl border border-gray-100 bg-white p-4 shadow-sm"
 						>
-							<span class="text-gray-500">已選服務</span>
-							<span class="font-medium"
-								>{selectedService.name}
-								<span class="ml-1 text-xs text-gray-400">({selectedService.desc})</span></span
-							>
+							{#if partySize > 1}
+								<div class="mb-1 flex items-center justify-between">
+									<span class="text-sm text-gray-500">已選服務（{partySize}人）</span>
+									<span class="text-xs font-medium text-[#8F9E91]">共 {totalDuration} 分鐘</span>
+								</div>
+								<p class="text-sm font-medium text-[#2C302E]">{serviceSummary}</p>
+							{:else}
+								<div class="flex items-center justify-between">
+									<span class="text-gray-500">已選服務</span>
+									<span class="font-medium"
+										>{selectedServices[0]?.name}
+										<span class="ml-1 text-xs text-gray-400">({selectedServices[0]?.desc})</span></span
+									>
+								</div>
+							{/if}
 						</div>
 
 						<div class="mb-8 grid grid-cols-3 gap-3">
 							{#each days as day}
-								<button
-									type="button"
-									class="flex cursor-pointer flex-col items-center justify-center rounded-2xl border p-3 transition-all duration-200
-                       {selectedDate === day.dateStr
-										? 'border-[#8F9E91] bg-[#8F9E91] text-white shadow-md'
-										: 'border-gray-200 bg-white text-gray-600 hover:border-[#8F9E91]'}"
-									on:click={() => (selectedDate = day.dateStr)}
-								>
-									<span class="text-lg font-bold">{day.display.split(' ')[0]}</span>
-									<span
-										class="mt-1 text-xs {selectedDate === day.dateStr
-											? 'text-white/80'
-											: 'text-gray-400'}">{day.display.split(' ')[1]}</span
+								{@const fullDayClosure = getFullDayClosure(day.dateStr)}
+								{@const timeClosures = getTimeClosures(day.dateStr)}
+								{#if fullDayClosure}
+									<div
+										class="flex cursor-not-allowed flex-col items-center justify-center rounded-2xl border border-gray-100 bg-gray-50 p-3 opacity-60"
 									>
-								</button>
+										<span class="text-lg font-bold text-gray-300">{day.display.split(' ')[0]}</span>
+										<span class="mt-1 text-xs text-gray-300">{day.display.split(' ')[1]}</span>
+										<span class="mt-1.5 inline-block rounded-full bg-[#f0dfdb] px-2 py-0.5 text-[10px] font-medium text-[#8c5656]">{fullDayClosure.reason || '店休'}</span>
+									</div>
+								{:else}
+									<button
+										type="button"
+										class="flex cursor-pointer flex-col items-center justify-center rounded-2xl border p-3 transition-all duration-200
+										{selectedDate === day.dateStr
+											? 'border-[#8F9E91] bg-[#8F9E91] text-white shadow-md'
+											: 'border-gray-200 bg-white text-gray-600 hover:border-[#8F9E91]'}"
+										on:click={() => (selectedDate = day.dateStr)}
+									>
+										<span class="text-lg font-bold">{day.display.split(' ')[0]}</span>
+										<span
+											class="mt-1 text-xs {selectedDate === day.dateStr
+												? 'text-white/80'
+												: 'text-gray-400'}">{day.display.split(' ')[1]}</span
+										>
+										{#if timeClosures.length > 0}
+											<span class="mt-1.5 inline-block rounded-full bg-[#fef3e2] px-2 py-0.5 text-[10px] font-medium text-[#946b2d]">部分時段休息</span>
+										{/if}
+									</button>
+								{/if}
 							{/each}
 						</div>
 
@@ -392,6 +501,12 @@
 								}}>更改日期</button
 							>
 						</div>
+
+						{#if partySize > 1}
+							<div class="mb-4 rounded-2xl border border-[#e3eadf] bg-[#f6faf4]/92 px-4 py-3 text-sm text-[#61705f]">
+								{partySize}人・{serviceSummary}・共 {totalDuration} 分鐘
+							</div>
+						{/if}
 
 						<div class="mb-8 grid grid-cols-3 gap-3">
 							{#each availableSlots as slot}
@@ -448,7 +563,6 @@
 								{/if}
 							</button>
 						</div>
-						<!-- Spacer for fixed bottom bar -->
 						<div class="h-16"></div>
 					</div>
 				{/if}

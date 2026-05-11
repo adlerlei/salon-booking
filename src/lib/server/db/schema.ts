@@ -12,12 +12,28 @@ export const appointments = sqliteTable('appointments', {
 	status: text('status', { enum: ['confirmed', 'cancelled'] })
 		.notNull()
 		.default('confirmed'),
+	partySize: integer('party_size').notNull().default(1),
+	servicesJson: text('services_json'), // JSON array: [{service, duration}, ...] for multi-person bookings
 	createdAt: integer('created_at', { mode: 'timestamp' }).$defaultFn(() => new Date())
 });
 
 export const admins = sqliteTable('admins', {
 	lineUserId: text('line_user_id').primaryKey(), // LINE User ID 為主鍵
 	name: text('name').notNull(), // 管理員名稱或備註
+	createdAt: integer('created_at', { mode: 'timestamp' })
+		.notNull()
+		.$defaultFn(() => new Date())
+});
+
+export const closures = sqliteTable('closures', {
+	id: text('id')
+		.primaryKey()
+		.$defaultFn(() => crypto.randomUUID()),
+	date: text('date').notNull(),
+	startTime: text('start_time'),
+	endTime: text('end_time'),
+	reason: text('reason'),
+	createdBy: text('created_by').notNull(),
 	createdAt: integer('created_at', { mode: 'timestamp' })
 		.notNull()
 		.$defaultFn(() => new Date())

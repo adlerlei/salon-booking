@@ -7,5 +7,12 @@ export const handle: Handle = async ({ event, resolve }) => {
 		event.platform?.env
 	);
 
-	return resolve(event);
+	const response = await resolve(event);
+
+	const path = event.url.pathname;
+	if (path === '/' || path.startsWith('/api/') || path.startsWith('/admin')) {
+		response.headers.set('Cache-Control', 'no-store');
+	}
+
+	return response;
 };

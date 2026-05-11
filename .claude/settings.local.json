@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find /Users/jianyin/Documents/salon-booking/.claude/worktrees/serene-hamilton-f1e477/src -type f \\\\\\( -name \"*.ts\" -o -name \"*.tsx\" \\\\\\) -exec grep -l \"duration\\\\|conflict\\\\|collision\\\\|available\" {} \\\\;)",
+      "Bash(npm run *)",
+      "Bash(DATABASE_URL=local.db npm run db:generate)",
+      "Bash(git add *)"
+    ]
+  }
+}
