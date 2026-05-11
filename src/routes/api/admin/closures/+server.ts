@@ -52,6 +52,13 @@ export async function POST({ request, locals, platform }) {
 		return json({ success: false, message: '結束時間必須晚於開始時間' }, { status: 400 });
 	}
 
+	if (startTime && (startTime < '11:00' || startTime > '20:00')) {
+		return json({ success: false, message: '開始時間須在營業時間 11:00-20:00 內' }, { status: 400 });
+	}
+	if (endTime && (endTime < '11:00' || endTime > '20:00')) {
+		return json({ success: false, message: '結束時間須在營業時間 11:00-20:00 內' }, { status: 400 });
+	}
+
 	const db = initDb(platform);
 	for (const d of dateList) {
 		await db.insert(closures).values({

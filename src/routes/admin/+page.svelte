@@ -49,6 +49,14 @@
 	let activeTab = $state<AdminTab>('agenda');
 
 	// Closure form state
+	const businessHours = (() => {
+		const times: string[] = [];
+		for (let h = 11; h <= 20; h++) {
+			times.push(`${String(h).padStart(2, '0')}:00`);
+			if (h < 20) times.push(`${String(h).padStart(2, '0')}:30`);
+		}
+		return times;
+	})();
 	let closureDates = $state<string[]>([]);
 	let closureIsFullDay = $state(true);
 	let closureStartTime = $state('11:00');
@@ -830,19 +838,25 @@
 							<div class="grid grid-cols-2 gap-3" in:slide={{ duration: 200 }}>
 								<label class="block">
 									<span class="text-sm font-medium text-[#5c554f]">開始時間</span>
-									<input
-										type="time"
+									<select
 										bind:value={closureStartTime}
 										class="mt-1 w-full rounded-xl border border-[#dfd3c8] bg-white px-4 py-3 text-[#2C302E] focus:border-[#8F9E91] focus:outline-none"
-									/>
+									>
+										{#each businessHours.filter((t) => t < closureEndTime) as t}
+											<option value={t}>{t}</option>
+										{/each}
+									</select>
 								</label>
 								<label class="block">
 									<span class="text-sm font-medium text-[#5c554f]">結束時間</span>
-									<input
-										type="time"
+									<select
 										bind:value={closureEndTime}
 										class="mt-1 w-full rounded-xl border border-[#dfd3c8] bg-white px-4 py-3 text-[#2C302E] focus:border-[#8F9E91] focus:outline-none"
-									/>
+									>
+										{#each businessHours.filter((t) => t > closureStartTime) as t}
+											<option value={t}>{t}</option>
+										{/each}
+									</select>
 								</label>
 							</div>
 						{/if}
