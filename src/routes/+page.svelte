@@ -547,7 +547,7 @@
 															: 'text-[#4c4640] hover:bg-[#f5f0eb]'}">
 													<span>{day}</span>
 													{#if hasTimeClosure}
-														<span class="mt-0.5 rounded-sm px-1 text-[8px] leading-tight {selectedDate === ds ? 'bg-white/20 text-white/80' : 'bg-[#fef3e2] text-[#946b2d]'}">部分休</span>
+														<span class="mt-0.5 rounded-sm px-1 text-[8px] leading-tight {selectedDate === ds ? 'bg-white/20 text-white/80' : 'bg-[#e8edf2] text-[#6b7d8d]'}">部分休</span>
 													{/if}
 												</button>
 											{/if}
