@@ -530,16 +530,16 @@
 											{@const hasTimeClosure = closureList.some((c) => c.date === ds && c.startTime && c.endTime)}
 											{@const disabled = past || sunday || beyond || !!fullClosure}
 											{#if disabled}
-												<div class="relative flex h-11 w-full flex-col items-center justify-center rounded-lg text-sm
-													{fullClosure ? 'bg-[#fdf5f3]' : sunday ? 'bg-gray-50' : ''} cursor-not-allowed opacity-40">
-													<span class="{sunday ? 'text-[#c08080]' : 'text-gray-300'}">{day}</span>
+												<div class="flex h-12 w-full flex-col items-center justify-center rounded-lg text-sm
+													{fullClosure ? 'bg-[#f0dfdb]' : sunday ? 'bg-gray-50' : ''} cursor-not-allowed">
+													<span class="{fullClosure ? 'text-[#8c5656]/60' : sunday ? 'text-[#c08080]/50' : 'text-gray-300'}">{day}</span>
 													{#if fullClosure}
-														<span class="absolute bottom-0.5 text-[7px] leading-none text-[#8c5656]">休</span>
+														<span class="mt-0.5 text-[8px] leading-none text-[#8c5656]">休</span>
 													{/if}
 												</div>
 											{:else}
 												<button type="button" on:click={() => (selectedDate = ds)}
-													class="relative flex h-11 w-full flex-col items-center justify-center rounded-lg text-sm transition-all
+													class="flex h-12 w-full flex-col items-center justify-center rounded-lg text-sm transition-all
 													{selectedDate === ds
 														? 'bg-[#8F9E91] font-semibold text-white shadow-sm'
 														: ds === todayStr
@@ -547,7 +547,7 @@
 															: 'text-[#4c4640] hover:bg-[#f5f0eb]'}">
 													<span>{day}</span>
 													{#if hasTimeClosure}
-														<span class="absolute bottom-0.5 text-[7px] leading-none {selectedDate === ds ? 'text-white/70' : 'text-[#946b2d]'}">部分休</span>
+														<span class="mt-0.5 rounded-sm px-1 text-[8px] leading-tight {selectedDate === ds ? 'bg-white/20 text-white/80' : 'bg-[#fef3e2] text-[#946b2d]'}">部分休</span>
 													{/if}
 												</button>
 											{/if}
