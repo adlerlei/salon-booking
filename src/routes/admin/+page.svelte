@@ -408,7 +408,7 @@
 					五
 				</div>
 				<div>
-					<p class="text-[11px] tracking-[0.28em] text-[#8E857D] uppercase">管理後台</p>
+					<p class="flex items-center gap-2 text-[11px] tracking-[0.28em] text-[#8E857D] uppercase">管理後台 <span class="tracking-normal text-[10px] text-[#b5ada5]">v{__APP_VERSION__}</span></p>
 					<h1
 						class="font-serif text-xl font-semibold tracking-[0.04em]"
 						style="font-family: 'Playfair Display', serif;"
