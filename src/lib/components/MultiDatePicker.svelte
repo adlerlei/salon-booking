@@ -110,6 +110,7 @@
 			type="button"
 			onclick={prevMonth}
 			disabled={!canGoPrev}
+			aria-label="上個月"
 			class="rounded-lg p-1.5 text-[#5c554f] transition-colors hover:bg-[#f5f0eb] disabled:opacity-30"
 		>
 			<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -120,6 +121,7 @@
 		<button
 			type="button"
 			onclick={nextMonth}
+			aria-label="下個月"
 			class="rounded-lg p-1.5 text-[#5c554f] transition-colors hover:bg-[#f5f0eb]"
 		>
 			<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
