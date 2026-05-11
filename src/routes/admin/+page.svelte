@@ -4,6 +4,7 @@
 	import { cubicOut } from 'svelte/easing';
 	import { fade, fly, scale, slide } from 'svelte/transition';
 	import { onDestroy, onMount } from 'svelte';
+	import MultiDatePicker from '$lib/components/MultiDatePicker.svelte';
 	import type { PageData } from './$types';
 
 	let { data }: { data: PageData } = $props();
@@ -48,7 +49,7 @@
 	let activeTab = $state<AdminTab>('agenda');
 
 	// Closure form state
-	let closureDate = $state('');
+	let closureDates = $state<string[]>([]);
 	let closureIsFullDay = $state(true);
 	let closureStartTime = $state('11:00');
 	let closureEndTime = $state('20:00');
@@ -67,11 +68,11 @@
 	};
 
 	const addClosure = async () => {
-		if (!closureDate) { closureError = '請選擇日期'; return; }
+		if (closureDates.length === 0) { closureError = '請選擇日期'; return; }
 		closureSubmitting = true;
 		closureError = '';
 		try {
-			const body: Record<string, string> = { date: closureDate };
+			const body: Record<string, unknown> = { dates: closureDates };
 			if (!closureIsFullDay) {
 				body.startTime = closureStartTime;
 				body.endTime = closureEndTime;
@@ -86,7 +87,7 @@
 			const result = await res.json() as { success: boolean; message?: string; closures?: ClosureRecord[] };
 			if (!result.success) { closureError = result.message || '新增失敗'; return; }
 			closureRecords = result.closures || [];
-			closureDate = '';
+			closureDates = [];
 			closureReason = '';
 			closureIsFullDay = true;
 		} catch {
@@ -804,15 +805,15 @@
 					<h2 class="text-xl font-semibold text-[#4c4640]">新增公休</h2>
 
 					<div class="mt-4 space-y-4">
-						<label class="block">
-							<span class="text-sm font-medium text-[#5c554f]">日期</span>
-							<input
-								type="date"
-								bind:value={closureDate}
-								min={new Date().toISOString().split('T')[0]}
-								class="mt-1 w-full rounded-xl border border-[#dfd3c8] bg-white px-4 py-3 text-[#2C302E] focus:border-[#8F9E91] focus:outline-none"
-							/>
-						</label>
+						<div>
+							<span class="text-sm font-medium text-[#5c554f]">選擇日期（可複選）</span>
+							<div class="mt-1">
+								<MultiDatePicker
+									bind:selectedDates={closureDates}
+									min={new Date().toISOString().split('T')[0]}
+								/>
+							</div>
+						</div>
 
 						<div>
 							<label class="flex items-center gap-3 text-sm font-medium text-[#5c554f]">
@@ -863,10 +864,10 @@
 						<button
 							type="button"
 							onclick={addClosure}
-							disabled={closureSubmitting || !closureDate}
+							disabled={closureSubmitting || closureDates.length === 0}
 							class="w-full rounded-xl bg-[#8F9E91] px-6 py-3 font-medium text-white shadow-sm transition-all hover:bg-[#7A8A7C] disabled:cursor-not-allowed disabled:opacity-50"
 						>
-							{closureSubmitting ? '新增中...' : '新增公休'}
+							{closureSubmitting ? '新增中...' : closureDates.length > 1 ? `新增 ${closureDates.length} 天公休` : '新增公休'}
 						</button>
 					</div>
 				</section>

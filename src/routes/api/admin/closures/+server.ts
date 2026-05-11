@@ -23,15 +23,25 @@ export async function POST({ request, locals, platform }) {
 	}
 
 	const body = await request.json();
-	const { date, startTime, endTime, reason } = body as {
-		date: string;
+	const { dates, date, startTime, endTime, reason } = body as {
+		dates?: string[];
+		date?: string;
 		startTime?: string;
 		endTime?: string;
 		reason?: string;
 	};
 
-	if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
-		return json({ success: false, message: '日期格式不正確' }, { status: 400 });
+	const dateList = dates ?? (date ? [date] : []);
+
+	if (dateList.length === 0) {
+		return json({ success: false, message: '請至少選擇一個日期' }, { status: 400 });
+	}
+
+	const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+	for (const d of dateList) {
+		if (!dateRegex.test(d)) {
+			return json({ success: false, message: `日期格式不正確：${d}` }, { status: 400 });
+		}
 	}
 
 	if ((startTime && !endTime) || (!startTime && endTime)) {
@@ -43,13 +53,15 @@ export async function POST({ request, locals, platform }) {
 	}
 
 	const db = initDb(platform);
-	await db.insert(closures).values({
-		date,
-		startTime: startTime || null,
-		endTime: endTime || null,
-		reason: reason || null,
-		createdBy: locals.lineUserId
-	});
+	for (const d of dateList) {
+		await db.insert(closures).values({
+			date: d,
+			startTime: startTime || null,
+			endTime: endTime || null,
+			reason: reason || null,
+			createdBy: locals.lineUserId
+		});
+	}
 
 	const all = await db.select().from(closures);
 	return json({ success: true, closures: all });
