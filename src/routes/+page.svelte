@@ -542,9 +542,11 @@
 													class="flex h-12 w-full flex-col items-center justify-center rounded-lg text-sm transition-all
 													{selectedDate === ds
 														? 'bg-[#8F9E91] font-semibold text-white shadow-sm'
-														: ds === todayStr
-															? 'font-semibold text-[#8F9E91] ring-1 ring-[#8F9E91]/40 hover:bg-[#f5f0eb]'
-															: 'text-[#4c4640] hover:bg-[#f5f0eb]'}">
+														: hasTimeClosure
+															? 'bg-[#e8edf2] text-[#4c4640] hover:bg-[#dce3e9]'
+															: ds === todayStr
+																? 'font-semibold text-[#8F9E91] ring-1 ring-[#8F9E91]/40 hover:bg-[#f5f0eb]'
+																: 'text-[#4c4640] hover:bg-[#f5f0eb]'}">
 													<span>{day}</span>
 													{#if hasTimeClosure}
 														<span class="mt-0.5 rounded-sm px-1 text-[8px] leading-tight {selectedDate === ds ? 'bg-white/20 text-white/80' : 'bg-[#e8edf2] text-[#6b7d8d]'}">部分休</span>
