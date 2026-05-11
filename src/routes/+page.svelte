@@ -107,31 +107,80 @@
 	const getTimeClosures = (dateStr: string) =>
 		getDateClosures(dateStr).filter((c) => c.startTime && c.endTime);
 
-	// Dates
-	const getNextValidDays = (count: number) => {
-		const result = [];
-		let d = new Date();
-		while (result.length < count) {
-			if (d.getDay() !== 0) {
-				const year = d.getFullYear();
-				const month = String(d.getMonth() + 1).padStart(2, '0');
-				const day = String(d.getDate()).padStart(2, '0');
-				result.push({
-					dateStr: `${year}-${month}-${day}`,
-					display: d.toLocaleDateString('zh-TW', {
-						month: 'short',
-						day: 'numeric',
-						weekday: 'short'
-					})
-				});
-			}
-			d.setDate(d.getDate() + 1);
-		}
-		return result;
-	};
-	const days = getNextValidDays(7);
+	// Dates — calendar view
+	const WEEKDAY_LABELS = ['日', '一', '二', '三', '四', '五', '六'];
+	const todayDate = new Date();
+	todayDate.setHours(0, 0, 0, 0);
 
-	let selectedDate = days[0].dateStr;
+	const fmtDate = (y: number, m: number, d: number) =>
+		`${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+
+	const todayStr = fmtDate(todayDate.getFullYear(), todayDate.getMonth(), todayDate.getDate());
+
+	let calViewYear = todayDate.getFullYear();
+	let calViewMonth = todayDate.getMonth();
+
+	$: calMonthLabel = `${calViewYear} 年 ${calViewMonth + 1} 月`;
+
+	$: calendarRows = (() => {
+		const firstDay = new Date(calViewYear, calViewMonth, 1).getDay();
+		const daysInMonth = new Date(calViewYear, calViewMonth + 1, 0).getDate();
+		const rows: (number | null)[][] = [];
+		let row: (number | null)[] = [];
+		for (let i = 0; i < firstDay; i++) row.push(null);
+		for (let d = 1; d <= daysInMonth; d++) {
+			row.push(d);
+			if (row.length === 7) { rows.push(row); row = []; }
+		}
+		if (row.length > 0) {
+			while (row.length < 7) row.push(null);
+			rows.push(row);
+		}
+		return rows;
+	})();
+
+	const isDatePast = (day: number) => {
+		const d = new Date(calViewYear, calViewMonth, day);
+		d.setHours(0, 0, 0, 0);
+		return d < todayDate;
+	};
+
+	const isSunday = (day: number) => new Date(calViewYear, calViewMonth, day).getDay() === 0;
+
+	const calDateStr = (day: number) => fmtDate(calViewYear, calViewMonth, day);
+
+	const calPrevMonth = () => {
+		if (calViewMonth === 0) { calViewMonth = 11; calViewYear--; }
+		else calViewMonth--;
+	};
+	const calNextMonth = () => {
+		if (calViewMonth === 11) { calViewMonth = 0; calViewYear++; }
+		else calViewMonth++;
+	};
+
+	$: canCalPrev = (() => {
+		const prevLast = calViewMonth === 0
+			? new Date(calViewYear - 1, 11, 31)
+			: new Date(calViewYear, calViewMonth, 0);
+		prevLast.setHours(0, 0, 0, 0);
+		return prevLast >= todayDate;
+	})();
+
+	const MAX_FUTURE_DAYS = 30;
+	const maxDate = new Date(todayDate);
+	maxDate.setDate(maxDate.getDate() + MAX_FUTURE_DAYS);
+	const maxDateStr = fmtDate(maxDate.getFullYear(), maxDate.getMonth(), maxDate.getDate());
+
+	const isBeyondRange = (day: number) => calDateStr(day) > maxDateStr;
+
+	$: canCalNext = (() => {
+		const firstNextMonth = calViewMonth === 11
+			? new Date(calViewYear + 1, 0, 1)
+			: new Date(calViewYear, calViewMonth + 1, 1);
+		return fmtDate(firstNextMonth.getFullYear(), firstNextMonth.getMonth(), firstNextMonth.getDate()) <= maxDateStr;
+	})();
+
+	let selectedDate = todayStr;
 	let selectedTime = '';
 	let step = 1;
 
@@ -210,8 +259,18 @@
 	});
 
 	$: if (closureList.some((c) => c.date === selectedDate && !c.startTime && !c.endTime)) {
-		const firstOpen = days.find((d) => !closureList.some((c) => c.date === d.dateStr && !c.startTime && !c.endTime));
-		if (firstOpen) selectedDate = firstOpen.dateStr;
+		let d = new Date(todayDate);
+		let found = false;
+		for (let i = 0; i <= MAX_FUTURE_DAYS; i++) {
+			const ds = fmtDate(d.getFullYear(), d.getMonth(), d.getDate());
+			if (d.getDay() !== 0 && !closureList.some((c) => c.date === ds && !c.startTime && !c.endTime)) {
+				selectedDate = ds;
+				found = true;
+				break;
+			}
+			d.setDate(d.getDate() + 1);
+		}
+		if (!found) selectedDate = todayStr;
 	}
 
 	$: {
@@ -437,39 +496,71 @@
 							{/if}
 						</div>
 
-						<div class="mb-8 grid grid-cols-3 gap-3">
-							{#each days as day}
-								{@const fullDayClosure = getFullDayClosure(day.dateStr)}
-								{@const timeClosures = getTimeClosures(day.dateStr)}
-								{#if fullDayClosure}
-									<div
-										class="flex cursor-not-allowed flex-col items-center justify-center rounded-2xl border border-gray-100 bg-gray-50 p-3 opacity-60"
-									>
-										<span class="text-lg font-bold text-gray-300">{day.display.split(' ')[0]}</span>
-										<span class="mt-1 text-xs text-gray-300">{day.display.split(' ')[1]}</span>
-										<span class="mt-1.5 inline-block rounded-full bg-[#f0dfdb] px-2 py-0.5 text-[10px] font-medium text-[#8c5656]">{fullDayClosure.reason || '店休'}</span>
-									</div>
-								{:else}
-									<button
-										type="button"
-										class="flex cursor-pointer flex-col items-center justify-center rounded-2xl border p-3 transition-all duration-200
-										{selectedDate === day.dateStr
-											? 'border-[#8F9E91] bg-[#8F9E91] text-white shadow-md'
-											: 'border-gray-200 bg-white text-gray-600 hover:border-[#8F9E91]'}"
-										on:click={() => (selectedDate = day.dateStr)}
-									>
-										<span class="text-lg font-bold">{day.display.split(' ')[0]}</span>
-										<span
-											class="mt-1 text-xs {selectedDate === day.dateStr
-												? 'text-white/80'
-												: 'text-gray-400'}">{day.display.split(' ')[1]}</span
-										>
-										{#if timeClosures.length > 0}
-											<span class="mt-1.5 inline-block rounded-full bg-[#fef3e2] px-2 py-0.5 text-[10px] font-medium text-[#946b2d]">部分時段休息</span>
+						<div class="mb-6 rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
+							<!-- month nav -->
+							<div class="mb-3 flex items-center justify-between">
+								<button type="button" on:click={calPrevMonth} disabled={!canCalPrev} aria-label="上個月"
+									class="rounded-lg p-1.5 text-[#5c554f] transition-colors hover:bg-[#f5f0eb] disabled:opacity-30">
+									<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" /></svg>
+								</button>
+								<span class="text-sm font-semibold text-[#4c4640]">{calMonthLabel}</span>
+								<button type="button" on:click={calNextMonth} disabled={!canCalNext} aria-label="下個月"
+									class="rounded-lg p-1.5 text-[#5c554f] transition-colors hover:bg-[#f5f0eb] disabled:opacity-30">
+									<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
+								</button>
+							</div>
+							<!-- weekday header -->
+							<div class="mb-1 grid grid-cols-7 text-center text-xs font-medium text-[#9b918a]">
+								{#each WEEKDAY_LABELS as label}
+									<div class="py-1">{label}</div>
+								{/each}
+							</div>
+							<!-- days -->
+							<div class="grid grid-cols-7 gap-1">
+								{#each calendarRows as row}
+									{#each row as day}
+										{#if day === null}
+											<div></div>
+										{:else}
+											{@const ds = calDateStr(day)}
+											{@const past = isDatePast(day)}
+											{@const sunday = isSunday(day)}
+											{@const beyond = isBeyondRange(day)}
+											{@const fullClosure = closureList.find((c) => c.date === ds && !c.startTime && !c.endTime)}
+											{@const hasTimeClosure = closureList.some((c) => c.date === ds && c.startTime && c.endTime)}
+											{@const disabled = past || sunday || beyond || !!fullClosure}
+											{#if disabled}
+												<div class="relative flex h-11 w-full flex-col items-center justify-center rounded-lg text-sm
+													{fullClosure ? 'bg-[#fdf5f3]' : sunday ? 'bg-gray-50' : ''} cursor-not-allowed opacity-40">
+													<span class="{sunday ? 'text-[#c08080]' : 'text-gray-300'}">{day}</span>
+													{#if fullClosure}
+														<span class="absolute -bottom-0.5 text-[7px] leading-none text-[#8c5656]">休</span>
+													{/if}
+												</div>
+											{:else}
+												<button type="button" on:click={() => (selectedDate = ds)}
+													class="relative flex h-11 w-full flex-col items-center justify-center rounded-lg text-sm transition-all
+													{selectedDate === ds
+														? 'bg-[#8F9E91] font-semibold text-white shadow-sm'
+														: ds === todayStr
+															? 'font-semibold text-[#8F9E91] ring-1 ring-[#8F9E91]/40 hover:bg-[#f5f0eb]'
+															: 'text-[#4c4640] hover:bg-[#f5f0eb]'}">
+													<span>{day}</span>
+													{#if hasTimeClosure}
+														<span class="absolute -bottom-0.5 text-[7px] leading-none {selectedDate === ds ? 'text-white/70' : 'text-[#946b2d]'}">部分休</span>
+													{/if}
+												</button>
+											{/if}
 										{/if}
-									</button>
-								{/if}
-							{/each}
+									{/each}
+								{/each}
+							</div>
+							<!-- legend -->
+							<div class="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-[10px] text-[#9b918a]">
+								<span class="flex items-center gap-1"><span class="inline-block h-2.5 w-2.5 rounded-sm bg-[#8F9E91]"></span>已選</span>
+								<span class="flex items-center gap-1"><span class="inline-block h-2.5 w-2.5 rounded-sm bg-[#fdf5f3] ring-1 ring-[#e8d5d0]"></span>公休</span>
+								<span class="flex items-center gap-1"><span class="inline-block h-2.5 w-2.5 rounded-sm bg-gray-50 ring-1 ring-gray-200"></span>週日</span>
+							</div>
 						</div>
 
 						<div class="mt-8 flex items-center justify-between">
