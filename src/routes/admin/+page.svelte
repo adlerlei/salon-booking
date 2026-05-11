@@ -57,6 +57,11 @@
 		}
 		return times;
 	})();
+	const formatTime12h = (t: string) => {
+		const [h, m] = t.split(':').map(Number);
+		const p = h < 12 ? '上午' : '下午';
+		return `${p} ${h === 0 ? 12 : h > 12 ? h - 12 : h}:${String(m).padStart(2, '0')}`;
+	};
 	let closureDates = $state<string[]>([]);
 	let closureIsFullDay = $state(true);
 	let closureStartTime = $state('11:00');
@@ -843,7 +848,7 @@
 										class="mt-1 w-full rounded-xl border border-[#dfd3c8] bg-white px-4 py-3 text-[#2C302E] focus:border-[#8F9E91] focus:outline-none"
 									>
 										{#each businessHours.filter((t) => t < closureEndTime) as t}
-											<option value={t}>{t}</option>
+											<option value={t}>{formatTime12h(t)}</option>
 										{/each}
 									</select>
 								</label>
@@ -854,7 +859,7 @@
 										class="mt-1 w-full rounded-xl border border-[#dfd3c8] bg-white px-4 py-3 text-[#2C302E] focus:border-[#8F9E91] focus:outline-none"
 									>
 										{#each businessHours.filter((t) => t > closureStartTime) as t}
-											<option value={t}>{t}</option>
+											<option value={t}>{formatTime12h(t)}</option>
 										{/each}
 									</select>
 								</label>
@@ -903,7 +908,7 @@
 										<p class="text-sm font-semibold text-[#47413c]">
 											{closure.date}
 											{#if closure.startTime && closure.endTime}
-												<span class="font-normal text-[#7a7169]">{closure.startTime}～{closure.endTime}</span>
+												<span class="font-normal text-[#7a7169]">{formatTime12h(closure.startTime)}～{formatTime12h(closure.endTime)}</span>
 											{:else}
 												<span class="font-normal text-[#b08080]">整天</span>
 											{/if}
@@ -942,7 +947,7 @@
 											<p class="text-sm text-[#7a7169]">
 												{closure.date}
 												{#if closure.startTime && closure.endTime}
-													{closure.startTime}～{closure.endTime}
+													{formatTime12h(closure.startTime)}～{formatTime12h(closure.endTime)}
 												{:else}
 													整天
 												{/if}

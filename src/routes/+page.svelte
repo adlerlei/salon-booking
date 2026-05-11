@@ -158,6 +158,13 @@
 		return h * 60 + m;
 	};
 
+	const formatTime12h = (timeStr: string) => {
+		const [h, m] = timeStr.split(':').map(Number);
+		const period = h < 12 ? '上午' : '下午';
+		const hour12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
+		return `${period} ${hour12}:${String(m).padStart(2, '0')}`;
+	};
+
 	$: availableSlots = allSlots.map((slot) => {
 		if (!allServicesSelected) return { time: slot, available: false };
 
@@ -530,14 +537,14 @@
                                 font-medium transition-all duration-200 peer-checked:border-[#2C302E]
                                 peer-checked:bg-[#2C302E] peer-checked:text-white peer-checked:shadow-md hover:border-[#8F9E91]"
 										>
-											{slot.time}
+											{formatTime12h(slot.time)}
 										</div>
 									</label>
 								{:else}
 									<div
 										class="flex cursor-not-allowed items-center justify-center rounded-xl border border-gray-100 bg-gray-50 py-3 text-center text-sm text-gray-300 line-through decoration-gray-300"
 									>
-										{slot.time}
+										{formatTime12h(slot.time)}
 									</div>
 								{/if}
 							{/each}
