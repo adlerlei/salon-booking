@@ -25,7 +25,7 @@
 		weekday: string;
 		records: BookingRecord[];
 	};
-	type AdminTab = 'agenda' | 'stats' | 'records' | 'closures';
+	type AdminTab = 'agenda' | 'stats' | 'records' | 'closures' | 'content';
 	type ClosureRecord = {
 		id: string;
 		date: string;
@@ -34,12 +34,36 @@
 		reason: string | null;
 		createdBy: string;
 	};
+	type AnnouncementRecord = {
+		id: string;
+		title: string;
+		content: string;
+		status: 'draft' | 'published';
+		startsAt: string | null;
+		endsAt: string | null;
+		isPinned: boolean;
+		showOnBooking: boolean;
+		updatedAt: Date | string;
+	};
+	type ArticleRecord = {
+		id: string;
+		slug: string;
+		title: string;
+		excerpt: string;
+		content: string;
+		coverImageUrl: string | null;
+		status: 'draft' | 'published';
+		publishedAt: string | null;
+		updatedAt: Date | string;
+	};
 
 	const liffId = '2009342816-q0rukZhq';
 	let authState = $state<AuthState>('needs-session');
 	let records = $state<BookingRecord[]>([]);
 	let stats = $state<DashboardStats | null>(null);
 	let closureRecords = $state<ClosureRecord[]>([]);
+	let announcementRecords = $state<AnnouncementRecord[]>([]);
+	let articleRecords = $state<ArticleRecord[]>([]);
 	let loading = $state(false);
 	let syncingSession = $state(false);
 	let error = $state('');
@@ -47,6 +71,26 @@
 	let interval: ReturnType<typeof setInterval> | null = null;
 	let isMounted = $state(false);
 	let activeTab = $state<AdminTab>('agenda');
+	let contentMode = $state<'announcements' | 'articles'>('announcements');
+	let contentError = $state('');
+	let contentSubmitting = $state(false);
+
+	let announcementEditingId = $state<string | null>(null);
+	let announcementTitle = $state('');
+	let announcementContent = $state('');
+	let announcementStatus = $state<'draft' | 'published'>('published');
+	let announcementStartsAt = $state('');
+	let announcementEndsAt = $state('');
+	let announcementIsPinned = $state(false);
+	let announcementShowOnBooking = $state(true);
+
+	let articleEditingId = $state<string | null>(null);
+	let articleTitle = $state('');
+	let articleSlug = $state('');
+	let articleExcerpt = $state('');
+	let articleContent = $state('');
+	let articleCoverImageUrl = $state('');
+	let articleStatus = $state<'draft' | 'published'>('draft');
 
 	// Closure form state
 	const businessHours = (() => {
@@ -73,7 +117,7 @@
 	const loadClosures = async () => {
 		try {
 			const res = await fetch('/api/admin/closures', { cache: 'no-store' });
-			const result = await res.json() as { success: boolean; closures?: ClosureRecord[] };
+			const result = (await res.json()) as { success: boolean; closures?: ClosureRecord[] };
 			if (result.success) closureRecords = result.closures || [];
 		} catch {
 			// silent
@@ -81,7 +125,10 @@
 	};
 
 	const addClosure = async () => {
-		if (closureDates.length === 0) { closureError = '請選擇日期'; return; }
+		if (closureDates.length === 0) {
+			closureError = '請選擇日期';
+			return;
+		}
 		closureSubmitting = true;
 		closureError = '';
 		try {
@@ -97,8 +144,15 @@
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify(body)
 			});
-			const result = await res.json() as { success: boolean; message?: string; closures?: ClosureRecord[] };
-			if (!result.success) { closureError = result.message || '新增失敗'; return; }
+			const result = (await res.json()) as {
+				success: boolean;
+				message?: string;
+				closures?: ClosureRecord[];
+			};
+			if (!result.success) {
+				closureError = result.message || '新增失敗';
+				return;
+			}
 			closureRecords = result.closures || [];
 			closureDates = [];
 			closureReason = '';
@@ -117,17 +171,216 @@
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ id })
 			});
-			const result = await res.json() as { success: boolean; closures?: ClosureRecord[] };
+			const result = (await res.json()) as { success: boolean; closures?: ClosureRecord[] };
 			if (result.success) closureRecords = result.closures || [];
 		} catch {
 			// silent
 		}
 	};
 
+	const normalizeSlug = (value: string) =>
+		value
+			.toLowerCase()
+			.trim()
+			.replace(/[^a-z0-9]+/g, '-')
+			.replace(/^-+|-+$/g, '');
+
+	const resetAnnouncementForm = () => {
+		announcementEditingId = null;
+		announcementTitle = '';
+		announcementContent = '';
+		announcementStatus = 'published';
+		announcementStartsAt = '';
+		announcementEndsAt = '';
+		announcementIsPinned = false;
+		announcementShowOnBooking = true;
+	};
+
+	const resetArticleForm = () => {
+		articleEditingId = null;
+		articleTitle = '';
+		articleSlug = '';
+		articleExcerpt = '';
+		articleContent = '';
+		articleCoverImageUrl = '';
+		articleStatus = 'draft';
+	};
+
+	const loadContent = async () => {
+		try {
+			const res = await fetch('/api/admin/content', { cache: 'no-store' });
+			const result = (await res.json()) as {
+				success: boolean;
+				announcements?: AnnouncementRecord[];
+				articles?: ArticleRecord[];
+			};
+			if (result.success) {
+				announcementRecords = result.announcements || [];
+				articleRecords = result.articles || [];
+			}
+		} catch {
+			// silent
+		}
+	};
+
+	const saveAnnouncement = async () => {
+		if (!announcementTitle.trim() || !announcementContent.trim()) {
+			contentError = '公告標題與內容必填';
+			return;
+		}
+
+		contentSubmitting = true;
+		contentError = '';
+
+		try {
+			const payload = {
+				type: 'announcement',
+				id: announcementEditingId,
+				title: announcementTitle,
+				content: announcementContent,
+				status: announcementStatus,
+				startsAt: announcementStartsAt || null,
+				endsAt: announcementEndsAt || null,
+				isPinned: announcementIsPinned,
+				showOnBooking: announcementShowOnBooking
+			};
+			const res = await fetch('/api/admin/content', {
+				method: announcementEditingId ? 'PATCH' : 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify(payload)
+			});
+			const result = (await res.json()) as {
+				success: boolean;
+				message?: string;
+				announcements?: AnnouncementRecord[];
+				articles?: ArticleRecord[];
+			};
+			if (!result.success) {
+				contentError = result.message || '公告儲存失敗';
+				return;
+			}
+			announcementRecords = result.announcements || [];
+			articleRecords = result.articles || [];
+			resetAnnouncementForm();
+		} catch {
+			contentError = '公告儲存失敗，請稍後再試';
+		} finally {
+			contentSubmitting = false;
+		}
+	};
+
+	const editAnnouncement = (item: AnnouncementRecord) => {
+		contentMode = 'announcements';
+		announcementEditingId = item.id;
+		announcementTitle = item.title;
+		announcementContent = item.content;
+		announcementStatus = item.status;
+		announcementStartsAt = item.startsAt || '';
+		announcementEndsAt = item.endsAt || '';
+		announcementIsPinned = item.isPinned;
+		announcementShowOnBooking = item.showOnBooking;
+	};
+
+	const deleteAnnouncement = async (id: string) => {
+		const res = await fetch('/api/admin/content', {
+			method: 'DELETE',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ type: 'announcement', id })
+		});
+		const result = (await res.json()) as {
+			success: boolean;
+			announcements?: AnnouncementRecord[];
+			articles?: ArticleRecord[];
+		};
+		if (result.success) {
+			announcementRecords = result.announcements || [];
+			articleRecords = result.articles || [];
+			if (announcementEditingId === id) resetAnnouncementForm();
+		}
+	};
+
+	const saveArticle = async () => {
+		const slug = normalizeSlug(articleSlug);
+		if (!articleTitle.trim() || !slug || !articleExcerpt.trim() || !articleContent.trim()) {
+			contentError = '文章標題、網址代號、摘要與內容必填';
+			return;
+		}
+
+		contentSubmitting = true;
+		contentError = '';
+
+		try {
+			const payload = {
+				type: 'article',
+				id: articleEditingId,
+				title: articleTitle,
+				slug,
+				excerpt: articleExcerpt,
+				content: articleContent,
+				coverImageUrl: articleCoverImageUrl || null,
+				status: articleStatus
+			};
+			const res = await fetch('/api/admin/content', {
+				method: articleEditingId ? 'PATCH' : 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify(payload)
+			});
+			const result = (await res.json()) as {
+				success: boolean;
+				message?: string;
+				announcements?: AnnouncementRecord[];
+				articles?: ArticleRecord[];
+			};
+			if (!result.success) {
+				contentError = result.message || '文章儲存失敗';
+				return;
+			}
+			announcementRecords = result.announcements || [];
+			articleRecords = result.articles || [];
+			resetArticleForm();
+		} catch {
+			contentError = '文章儲存失敗，請稍後再試';
+		} finally {
+			contentSubmitting = false;
+		}
+	};
+
+	const editArticle = (item: ArticleRecord) => {
+		contentMode = 'articles';
+		articleEditingId = item.id;
+		articleTitle = item.title;
+		articleSlug = item.slug;
+		articleExcerpt = item.excerpt;
+		articleContent = item.content;
+		articleCoverImageUrl = item.coverImageUrl || '';
+		articleStatus = item.status;
+	};
+
+	const deleteArticle = async (id: string) => {
+		const res = await fetch('/api/admin/content', {
+			method: 'DELETE',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ type: 'article', id })
+		});
+		const result = (await res.json()) as {
+			success: boolean;
+			announcements?: AnnouncementRecord[];
+			articles?: ArticleRecord[];
+		};
+		if (result.success) {
+			announcementRecords = result.announcements || [];
+			articleRecords = result.articles || [];
+			if (articleEditingId === id) resetArticleForm();
+		}
+	};
+
 	const upcomingClosures = $derived(
 		closureRecords
 			.filter((c) => c.date >= new Date().toISOString().split('T')[0])
-			.sort((a, b) => a.date.localeCompare(b.date) || (a.startTime || '').localeCompare(b.startTime || ''))
+			.sort(
+				(a, b) =>
+					a.date.localeCompare(b.date) || (a.startTime || '').localeCompare(b.startTime || '')
+			)
 	);
 
 	const pastClosures = $derived(
@@ -361,6 +614,7 @@
 		if (authState === 'authorized') {
 			startPolling();
 			loadClosures();
+			loadContent();
 			return;
 		}
 
@@ -408,7 +662,11 @@
 					五
 				</div>
 				<div>
-					<p class="flex items-center gap-2 text-[11px] tracking-[0.28em] text-[#8E857D] uppercase">管理後台 <span class="tracking-normal text-[10px] text-[#b5ada5]">v{__APP_VERSION__}</span></p>
+					<p class="flex items-center gap-2 text-[11px] tracking-[0.28em] text-[#8E857D] uppercase">
+						管理後台 <span class="text-[10px] tracking-normal text-[#b5ada5]"
+							>v{__APP_VERSION__}</span
+						>
+					</p>
 					<h1
 						class="font-serif text-xl font-semibold tracking-[0.04em]"
 						style="font-family: 'Playfair Display', serif;"
@@ -560,6 +818,17 @@
 					>
 						公休
 					</button>
+					<button
+						type="button"
+						class={`shrink-0 rounded-full px-4 py-2 text-sm font-medium shadow-sm transition-colors ${
+							activeTab === 'content'
+								? 'bg-[#8F9E91] text-white'
+								: 'border border-[#dfd3c8] bg-white/82 text-[#5f5750]'
+						}`}
+						onclick={() => (activeTab = 'content')}
+					>
+						消息
+					</button>
 				</div>
 
 				{#if error}
@@ -586,19 +855,19 @@
 									<div class="w-14 shrink-0 text-center">
 										{#if isToday(group.records[0].appointmentDate)}
 											<p class="text-xs font-semibold tracking-wider text-[#8F9E91]">今天</p>
-											<p class="text-2xl font-bold leading-tight text-[#2C302E]">
+											<p class="text-2xl leading-tight font-bold text-[#2C302E]">
 												{group.date.split('/')[1] || group.date}
 											</p>
 											<p class="text-xs text-[#8F9E91]">{group.weekday}</p>
 										{:else if isTomorrow(group.records[0].appointmentDate)}
 											<p class="text-xs font-semibold tracking-wider text-[#9b9086]">明天</p>
-											<p class="text-2xl font-bold leading-tight text-[#4c4640]">
+											<p class="text-2xl leading-tight font-bold text-[#4c4640]">
 												{group.date.split('/')[1] || group.date}
 											</p>
 											<p class="text-xs text-[#9b9086]">{group.weekday}</p>
 										{:else}
 											<p class="text-xs text-[#9b9086]">{group.date.split('/')[0]}月</p>
-											<p class="text-2xl font-bold leading-tight text-[#4c4640]">
+											<p class="text-2xl leading-tight font-bold text-[#4c4640]">
 												{group.date.split('/')[1] || group.date}
 											</p>
 											<p class="text-xs text-[#9b9086]">{group.weekday}</p>
@@ -738,7 +1007,9 @@
 														{record.customerName}
 													</h3>
 													{#if (record.partySize ?? 1) > 1}
-														<span class="rounded-full bg-[#8F9E91]/15 px-2 py-0.5 text-xs text-[#61705f]">
+														<span
+															class="rounded-full bg-[#8F9E91]/15 px-2 py-0.5 text-xs text-[#61705f]"
+														>
 															{record.partySize}人
 														</span>
 													{/if}
@@ -797,7 +1068,9 @@
 												>{formatTime(record.appointmentDate)}</span
 											>
 										</div>
-										<p class="mt-2 text-xs text-[#7a6967]">{record.appointmentDate.split('T')[0]}</p>
+										<p class="mt-2 text-xs text-[#7a6967]">
+											{record.appointmentDate.split('T')[0]}
+										</p>
 									</div>
 								{/each}
 							</div>
@@ -886,7 +1159,11 @@
 							disabled={closureSubmitting || closureDates.length === 0}
 							class="w-full rounded-xl bg-[#8F9E91] px-6 py-3 font-medium text-white shadow-sm transition-all hover:bg-[#7A8A7C] disabled:cursor-not-allowed disabled:opacity-50"
 						>
-							{closureSubmitting ? '新增中...' : closureDates.length > 1 ? `新增 ${closureDates.length} 天公休` : '新增公休'}
+							{closureSubmitting
+								? '新增中...'
+								: closureDates.length > 1
+									? `新增 ${closureDates.length} 天公休`
+									: '新增公休'}
 						</button>
 					</div>
 				</section>
@@ -908,7 +1185,11 @@
 										<p class="text-sm font-semibold text-[#47413c]">
 											{closure.date}
 											{#if closure.startTime && closure.endTime}
-												<span class="font-normal text-[#7a7169]">{formatTime12h(closure.startTime)}～{formatTime12h(closure.endTime)}</span>
+												<span class="font-normal text-[#7a7169]"
+													>{formatTime12h(closure.startTime)}～{formatTime12h(
+														closure.endTime
+													)}</span
+												>
 											{:else}
 												<span class="font-normal text-[#b08080]">整天</span>
 											{/if}
@@ -963,6 +1244,293 @@
 										>
 											刪除
 										</button>
+									</div>
+								{/each}
+							</div>
+						</div>
+					{/if}
+				</section>
+			{:else if activeTab === 'content'}
+				<section
+					class="mt-6 rounded-[30px] border border-white/60 bg-white/78 p-5 shadow-[0_24px_60px_rgba(74,69,64,0.08)] backdrop-blur-xl md:p-6"
+					in:fly={{ y: 18, duration: 350, easing: cubicOut }}
+				>
+					<div class="flex items-center justify-between gap-3">
+						<h2 class="text-xl font-semibold text-[#4c4640]">消息管理</h2>
+						<div class="flex rounded-full border border-[#dfd3c8] bg-white/82 p-1">
+							<button
+								type="button"
+								class={`rounded-full px-3 py-1.5 text-sm font-medium ${
+									contentMode === 'announcements' ? 'bg-[#8F9E91] text-white' : 'text-[#5f5750]'
+								}`}
+								onclick={() => (contentMode = 'announcements')}
+							>
+								公告
+							</button>
+							<button
+								type="button"
+								class={`rounded-full px-3 py-1.5 text-sm font-medium ${
+									contentMode === 'articles' ? 'bg-[#8F9E91] text-white' : 'text-[#5f5750]'
+								}`}
+								onclick={() => (contentMode = 'articles')}
+							>
+								文章
+							</button>
+						</div>
+					</div>
+
+					{#if contentError}
+						<p
+							class="mt-4 rounded-xl border border-[#ecd6d2] bg-[#fbefed] px-4 py-3 text-sm text-[#a06f6f]"
+						>
+							{contentError}
+						</p>
+					{/if}
+
+					{#if contentMode === 'announcements'}
+						<div class="mt-5 grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+							<div class="rounded-[24px] border border-[#ece3d9] bg-[#fcfaf7]/84 p-4">
+								<h3 class="font-semibold text-[#4c4640]">
+									{announcementEditingId ? '編輯公告' : '新增公告'}
+								</h3>
+								<div class="mt-4 space-y-3">
+									<label class="block">
+										<span class="text-sm font-medium text-[#5c554f]">標題</span>
+										<input
+											type="text"
+											bind:value={announcementTitle}
+											class="mt-1 w-full rounded-xl border border-[#dfd3c8] bg-white px-4 py-3 text-[#2C302E] focus:border-[#8F9E91] focus:outline-none"
+										/>
+									</label>
+									<label class="block">
+										<span class="text-sm font-medium text-[#5c554f]">內容</span>
+										<textarea
+											bind:value={announcementContent}
+											rows="5"
+											class="mt-1 w-full rounded-xl border border-[#dfd3c8] bg-white px-4 py-3 text-[#2C302E] focus:border-[#8F9E91] focus:outline-none"
+										></textarea>
+									</label>
+									<div class="grid grid-cols-2 gap-3">
+										<label class="block">
+											<span class="text-sm font-medium text-[#5c554f]">開始顯示</span>
+											<input
+												type="datetime-local"
+												bind:value={announcementStartsAt}
+												class="mt-1 w-full rounded-xl border border-[#dfd3c8] bg-white px-3 py-3 text-sm text-[#2C302E] focus:border-[#8F9E91] focus:outline-none"
+											/>
+										</label>
+										<label class="block">
+											<span class="text-sm font-medium text-[#5c554f]">結束顯示</span>
+											<input
+												type="datetime-local"
+												bind:value={announcementEndsAt}
+												class="mt-1 w-full rounded-xl border border-[#dfd3c8] bg-white px-3 py-3 text-sm text-[#2C302E] focus:border-[#8F9E91] focus:outline-none"
+											/>
+										</label>
+									</div>
+									<div class="flex flex-wrap gap-4 text-sm font-medium text-[#5c554f]">
+										<label class="flex items-center gap-2">
+											<input
+												type="checkbox"
+												bind:checked={announcementIsPinned}
+												class="h-4 w-4 rounded accent-[#8F9E91]"
+											/>
+											置頂
+										</label>
+										<label class="flex items-center gap-2">
+											<input
+												type="checkbox"
+												bind:checked={announcementShowOnBooking}
+												class="h-4 w-4 rounded accent-[#8F9E91]"
+											/>
+											顯示在預約頁
+										</label>
+									</div>
+									<label class="block">
+										<span class="text-sm font-medium text-[#5c554f]">狀態</span>
+										<select
+											bind:value={announcementStatus}
+											class="mt-1 w-full rounded-xl border border-[#dfd3c8] bg-white px-4 py-3 text-[#2C302E] focus:border-[#8F9E91] focus:outline-none"
+										>
+											<option value="published">發布</option>
+											<option value="draft">草稿</option>
+										</select>
+									</label>
+									<div class="flex gap-2">
+										<button
+											type="button"
+											onclick={saveAnnouncement}
+											disabled={contentSubmitting}
+											class="flex-1 rounded-xl bg-[#8F9E91] px-6 py-3 font-medium text-white shadow-sm transition-all hover:bg-[#7A8A7C] disabled:opacity-50"
+										>
+											{contentSubmitting ? '儲存中...' : '儲存公告'}
+										</button>
+										{#if announcementEditingId}
+											<button
+												type="button"
+												onclick={resetAnnouncementForm}
+												class="rounded-xl border border-[#dfd3c8] bg-white px-4 py-3 font-medium text-[#5f5750]"
+											>
+												取消
+											</button>
+										{/if}
+									</div>
+								</div>
+							</div>
+
+							<div class="space-y-3">
+								{#each announcementRecords as item (item.id)}
+									<div class="rounded-[22px] border border-[#ece3d9] bg-white/82 p-4 shadow-sm">
+										<div class="flex items-start justify-between gap-3">
+											<div>
+												<p class="font-semibold text-[#4c4640]">{item.title}</p>
+												<p class="mt-1 line-clamp-2 text-sm whitespace-pre-line text-[#7a7169]">
+													{item.content}
+												</p>
+												<p class="mt-2 text-xs text-[#9b9086]">
+													{item.status === 'published' ? '已發布' : '草稿'}
+													{item.showOnBooking ? ' · 預約頁顯示' : ''}
+													{item.isPinned ? ' · 置頂' : ''}
+												</p>
+											</div>
+											<div class="flex shrink-0 gap-2">
+												<button
+													type="button"
+													onclick={() => editAnnouncement(item)}
+													class="rounded-lg border border-[#dfd3c8] px-3 py-1.5 text-xs text-[#5f5750]"
+													>編輯</button
+												>
+												<button
+													type="button"
+													onclick={() => deleteAnnouncement(item.id)}
+													class="rounded-lg border border-[#e6d3cf] px-3 py-1.5 text-xs text-[#a06f6f]"
+													>刪除</button
+												>
+											</div>
+										</div>
+									</div>
+								{:else}
+									<div
+										class="rounded-[22px] border border-dashed border-[#ded2c6] bg-white/65 px-4 py-8 text-center text-[#7f766f]"
+									>
+										目前沒有公告
+									</div>
+								{/each}
+							</div>
+						</div>
+					{:else}
+						<div class="mt-5 grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+							<div class="rounded-[24px] border border-[#ece3d9] bg-[#fcfaf7]/84 p-4">
+								<h3 class="font-semibold text-[#4c4640]">
+									{articleEditingId ? '編輯文章' : '新增文章'}
+								</h3>
+								<div class="mt-4 space-y-3">
+									<label class="block">
+										<span class="text-sm font-medium text-[#5c554f]">標題</span>
+										<input
+											type="text"
+											bind:value={articleTitle}
+											class="mt-1 w-full rounded-xl border border-[#dfd3c8] bg-white px-4 py-3 text-[#2C302E] focus:border-[#8F9E91] focus:outline-none"
+										/>
+									</label>
+									<label class="block">
+										<span class="text-sm font-medium text-[#5c554f]">網址代號</span>
+										<input
+											type="text"
+											bind:value={articleSlug}
+											placeholder="hair-care-after-color"
+											class="mt-1 w-full rounded-xl border border-[#dfd3c8] bg-white px-4 py-3 text-[#2C302E] placeholder:text-[#c4b8ac] focus:border-[#8F9E91] focus:outline-none"
+											onblur={() => (articleSlug = normalizeSlug(articleSlug))}
+										/>
+									</label>
+									<label class="block">
+										<span class="text-sm font-medium text-[#5c554f]">封面圖網址（選填）</span>
+										<input
+											type="url"
+											bind:value={articleCoverImageUrl}
+											class="mt-1 w-full rounded-xl border border-[#dfd3c8] bg-white px-4 py-3 text-[#2C302E] focus:border-[#8F9E91] focus:outline-none"
+										/>
+									</label>
+									<label class="block">
+										<span class="text-sm font-medium text-[#5c554f]">摘要</span>
+										<textarea
+											bind:value={articleExcerpt}
+											rows="3"
+											class="mt-1 w-full rounded-xl border border-[#dfd3c8] bg-white px-4 py-3 text-[#2C302E] focus:border-[#8F9E91] focus:outline-none"
+										></textarea>
+									</label>
+									<label class="block">
+										<span class="text-sm font-medium text-[#5c554f]">內文</span>
+										<textarea
+											bind:value={articleContent}
+											rows="8"
+											class="mt-1 w-full rounded-xl border border-[#dfd3c8] bg-white px-4 py-3 text-[#2C302E] focus:border-[#8F9E91] focus:outline-none"
+										></textarea>
+									</label>
+									<label class="block">
+										<span class="text-sm font-medium text-[#5c554f]">狀態</span>
+										<select
+											bind:value={articleStatus}
+											class="mt-1 w-full rounded-xl border border-[#dfd3c8] bg-white px-4 py-3 text-[#2C302E] focus:border-[#8F9E91] focus:outline-none"
+										>
+											<option value="draft">草稿</option>
+											<option value="published">發布</option>
+										</select>
+									</label>
+									<div class="flex gap-2">
+										<button
+											type="button"
+											onclick={saveArticle}
+											disabled={contentSubmitting}
+											class="flex-1 rounded-xl bg-[#8F9E91] px-6 py-3 font-medium text-white shadow-sm transition-all hover:bg-[#7A8A7C] disabled:opacity-50"
+										>
+											{contentSubmitting ? '儲存中...' : '儲存文章'}
+										</button>
+										{#if articleEditingId}
+											<button
+												type="button"
+												onclick={resetArticleForm}
+												class="rounded-xl border border-[#dfd3c8] bg-white px-4 py-3 font-medium text-[#5f5750]"
+											>
+												取消
+											</button>
+										{/if}
+									</div>
+								</div>
+							</div>
+
+							<div class="space-y-3">
+								{#each articleRecords as item (item.id)}
+									<div class="rounded-[22px] border border-[#ece3d9] bg-white/82 p-4 shadow-sm">
+										<div class="flex items-start justify-between gap-3">
+											<div class="min-w-0">
+												<p class="font-semibold text-[#4c4640]">{item.title}</p>
+												<p class="mt-1 text-sm text-[#7a7169]">{item.excerpt}</p>
+												<p class="mt-2 text-xs text-[#9b9086]">
+													{item.status === 'published' ? '已發布' : '草稿'} · /news/{item.slug}
+												</p>
+											</div>
+											<div class="flex shrink-0 gap-2">
+												<button
+													type="button"
+													onclick={() => editArticle(item)}
+													class="rounded-lg border border-[#dfd3c8] px-3 py-1.5 text-xs text-[#5f5750]"
+													>編輯</button
+												>
+												<button
+													type="button"
+													onclick={() => deleteArticle(item.id)}
+													class="rounded-lg border border-[#e6d3cf] px-3 py-1.5 text-xs text-[#a06f6f]"
+													>刪除</button
+												>
+											</div>
+										</div>
+									</div>
+								{:else}
+									<div
+										class="rounded-[22px] border border-dashed border-[#ded2c6] bg-white/65 px-4 py-8 text-center text-[#7f766f]"
+									>
+										目前沒有文章
 									</div>
 								{/each}
 							</div>
