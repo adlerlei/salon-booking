@@ -3,6 +3,7 @@ import { appointments, closures } from '$lib/server/db/schema';
 import { eq, gte } from 'drizzle-orm';
 import { verifyLineAccessToken } from '$lib/server/auth/line';
 import { notifyAdminsAboutNewBooking } from '$lib/server/notifications/line';
+import { listActiveAnnouncements } from '$lib/server/news';
 
 // 服務對應的時間（分鐘）
 const serviceDurations: Record<string, number> = {
@@ -47,7 +48,7 @@ export const load = async ({ platform }) => {
 	const db = initDb(platform);
 	const today = toTaipeiNowString().split('T')[0];
 
-	const [allAppointments, allClosures] = await Promise.all([
+	const [allAppointments, allClosures, bookingAnnouncements] = await Promise.all([
 		db
 			.select({
 				appointmentDate: appointments.appointmentDate,
@@ -63,12 +64,14 @@ export const load = async ({ platform }) => {
 				reason: closures.reason
 			})
 			.from(closures)
-			.where(gte(closures.date, today))
+			.where(gte(closures.date, today)),
+		listActiveAnnouncements(platform, true)
 	]);
 
 	return {
 		appointments: allAppointments,
-		closures: allClosures
+		closures: allClosures,
+		announcements: bookingAnnouncements
 	};
 };
 
@@ -138,12 +141,14 @@ export const actions = {
 				.from(closures)
 				.where(eq(closures.date, selectedDate));
 
-			const closureBlocked = dateClosures.some((c) => {
-				if (!c.startTime || !c.endTime) return true;
-				const cStart = timeToMinutes(c.startTime);
-				const cEnd = timeToMinutes(c.endTime);
-				return selectedStartMinutes < cEnd && selectedEndMinutes > cStart;
-			});
+			const closureBlocked = dateClosures.some(
+				(c: { date: string; startTime: string | null; endTime: string | null }) => {
+					if (!c.startTime || !c.endTime) return true;
+					const cStart = timeToMinutes(c.startTime);
+					const cEnd = timeToMinutes(c.endTime);
+					return selectedStartMinutes < cEnd && selectedEndMinutes > cStart;
+				}
+			);
 
 			if (closureBlocked) {
 				return { success: false, message: '該時段為公休時間，無法預約' };

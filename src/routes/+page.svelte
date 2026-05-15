@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { resolve } from '$app/paths';
 	import { enhance } from '$app/forms';
 	import { goto } from '$app/navigation';
 	import { fade, slide } from 'svelte/transition';
@@ -51,7 +52,7 @@
 		try {
 			const res = await fetch('/api/closures');
 			if (res.ok) {
-				const json = await res.json();
+				const json = (await res.json()) as { closures: Closure[] };
 				freshClosures = json.closures;
 			}
 		} catch {}
@@ -75,7 +76,7 @@
 
 	// Party size and per-person service selection
 	let partySize = 1;
-	let selectedServices: (typeof services[0] | null)[] = [null];
+	let selectedServices: ((typeof services)[0] | null)[] = [null];
 
 	const handlePartySizeChange = (n: number) => {
 		partySize = n;
@@ -94,7 +95,12 @@
 			.join('・') || '';
 
 	// Closures
-	type Closure = { date: string; startTime: string | null; endTime: string | null; reason: string | null };
+	type Closure = {
+		date: string;
+		startTime: string | null;
+		endTime: string | null;
+		reason: string | null;
+	};
 	let freshClosures: Closure[] | null = null;
 	$: closureList = (freshClosures ?? data?.closures ?? []) as Closure[];
 
@@ -130,7 +136,10 @@
 		for (let i = 0; i < firstDay; i++) row.push(null);
 		for (let d = 1; d <= daysInMonth; d++) {
 			row.push(d);
-			if (row.length === 7) { rows.push(row); row = []; }
+			if (row.length === 7) {
+				rows.push(row);
+				row = [];
+			}
 		}
 		if (row.length > 0) {
 			while (row.length < 7) row.push(null);
@@ -150,18 +159,23 @@
 	const calDateStr = (day: number) => fmtDate(calViewYear, calViewMonth, day);
 
 	const calPrevMonth = () => {
-		if (calViewMonth === 0) { calViewMonth = 11; calViewYear--; }
-		else calViewMonth--;
+		if (calViewMonth === 0) {
+			calViewMonth = 11;
+			calViewYear--;
+		} else calViewMonth--;
 	};
 	const calNextMonth = () => {
-		if (calViewMonth === 11) { calViewMonth = 0; calViewYear++; }
-		else calViewMonth++;
+		if (calViewMonth === 11) {
+			calViewMonth = 0;
+			calViewYear++;
+		} else calViewMonth++;
 	};
 
 	$: canCalPrev = (() => {
-		const prevLast = calViewMonth === 0
-			? new Date(calViewYear - 1, 11, 31)
-			: new Date(calViewYear, calViewMonth, 0);
+		const prevLast =
+			calViewMonth === 0
+				? new Date(calViewYear - 1, 11, 31)
+				: new Date(calViewYear, calViewMonth, 0);
 		prevLast.setHours(0, 0, 0, 0);
 		return prevLast >= todayDate;
 	})();
@@ -174,10 +188,14 @@
 	const isBeyondRange = (day: number) => calDateStr(day) > maxDateStr;
 
 	$: canCalNext = (() => {
-		const firstNextMonth = calViewMonth === 11
-			? new Date(calViewYear + 1, 0, 1)
-			: new Date(calViewYear, calViewMonth + 1, 1);
-		return fmtDate(firstNextMonth.getFullYear(), firstNextMonth.getMonth(), firstNextMonth.getDate()) <= maxDateStr;
+		const firstNextMonth =
+			calViewMonth === 11
+				? new Date(calViewYear + 1, 0, 1)
+				: new Date(calViewYear, calViewMonth + 1, 1);
+		return (
+			fmtDate(firstNextMonth.getFullYear(), firstNextMonth.getMonth(), firstNextMonth.getDate()) <=
+			maxDateStr
+		);
 	})();
 
 	let selectedDate = todayStr;
@@ -263,7 +281,10 @@
 		let found = false;
 		for (let i = 0; i <= MAX_FUTURE_DAYS; i++) {
 			const ds = fmtDate(d.getFullYear(), d.getMonth(), d.getDate());
-			if (d.getDay() !== 0 && !closureList.some((c) => c.date === ds && !c.startTime && !c.endTime)) {
+			if (
+				d.getDay() !== 0 &&
+				!closureList.some((c) => c.date === ds && !c.startTime && !c.endTime)
+			) {
 				selectedDate = ds;
 				found = true;
 				break;
@@ -274,7 +295,10 @@
 	}
 
 	$: {
-		if (selectedTime && !availableSlots.some((slot) => slot.time === selectedTime && slot.available)) {
+		if (
+			selectedTime &&
+			!availableSlots.some((slot) => slot.time === selectedTime && slot.available)
+		) {
 			selectedTime = '';
 		}
 	}
@@ -324,6 +348,33 @@
 				<input type="hidden" name="partySize" value={partySize} />
 				<input type="hidden" name="servicesJson" value={servicesJsonValue} />
 				<input type="hidden" name="appointmentDate" value="{selectedDate}T{selectedTime}" />
+
+				{#if data.announcements?.length}
+					<section class="space-y-3">
+						{#each data.announcements.slice(0, 2) as announcement}
+							<a
+								href={resolve('/news')}
+								class="block rounded-2xl border border-[#eadfd4] bg-white p-4 shadow-sm transition-colors hover:border-[#8F9E91]"
+							>
+								<div class="flex items-start gap-3">
+									<span
+										class="mt-0.5 shrink-0 rounded-full bg-[#8F9E91]/12 px-2 py-1 text-[11px] font-semibold text-[#61705f]"
+									>
+										公告
+									</span>
+									<div class="min-w-0">
+										<p class="font-semibold text-[#3f3934]">{announcement.title}</p>
+										<p
+											class="mt-1 line-clamp-2 text-sm leading-6 whitespace-pre-line text-[#746b63]"
+										>
+											{announcement.content}
+										</p>
+									</div>
+								</div>
+							</a>
+						{/each}
+					</section>
+				{/if}
 
 				<!-- Progress Indicator -->
 				<div class="mb-8 flex items-center justify-between px-2">
@@ -385,7 +436,7 @@
 									<h3 class="mb-3 flex items-center gap-2 text-base font-semibold text-[#4c4640]">
 										<span
 											class="flex h-6 w-6 items-center justify-center rounded-full bg-[#f1ebe4] text-xs font-bold text-[#8F9E91]"
-										>{i + 1}</span
+											>{i + 1}</span
 										>
 										第 {i + 1} 位
 										{#if selectedServices[i]}
@@ -476,9 +527,7 @@
 							>
 						</div>
 
-						<div
-							class="mb-6 rounded-2xl border border-gray-100 bg-white p-4 shadow-sm"
-						>
+						<div class="mb-6 rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
 							{#if partySize > 1}
 								<div class="mb-1 flex items-center justify-between">
 									<span class="text-sm text-gray-500">已選服務（{partySize}人）</span>
@@ -490,7 +539,8 @@
 									<span class="text-gray-500">已選服務</span>
 									<span class="font-medium"
 										>{selectedServices[0]?.name}
-										<span class="ml-1 text-xs text-gray-400">({selectedServices[0]?.desc})</span></span
+										<span class="ml-1 text-xs text-gray-400">({selectedServices[0]?.desc})</span
+										></span
 									>
 								</div>
 							{/if}
@@ -499,14 +549,38 @@
 						<div class="mb-6 rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
 							<!-- month nav -->
 							<div class="mb-3 flex items-center justify-between">
-								<button type="button" on:click={calPrevMonth} disabled={!canCalPrev} aria-label="上個月"
-									class="rounded-lg p-1.5 text-[#5c554f] transition-colors hover:bg-[#f5f0eb] disabled:opacity-30">
-									<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" /></svg>
+								<button
+									type="button"
+									on:click={calPrevMonth}
+									disabled={!canCalPrev}
+									aria-label="上個月"
+									class="rounded-lg p-1.5 text-[#5c554f] transition-colors hover:bg-[#f5f0eb] disabled:opacity-30"
+								>
+									<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+										><path
+											stroke-linecap="round"
+											stroke-linejoin="round"
+											stroke-width="2"
+											d="M15 19l-7-7 7-7"
+										/></svg
+									>
 								</button>
 								<span class="text-sm font-semibold text-[#4c4640]">{calMonthLabel}</span>
-								<button type="button" on:click={calNextMonth} disabled={!canCalNext} aria-label="下個月"
-									class="rounded-lg p-1.5 text-[#5c554f] transition-colors hover:bg-[#f5f0eb] disabled:opacity-30">
-									<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
+								<button
+									type="button"
+									on:click={calNextMonth}
+									disabled={!canCalNext}
+									aria-label="下個月"
+									class="rounded-lg p-1.5 text-[#5c554f] transition-colors hover:bg-[#f5f0eb] disabled:opacity-30"
+								>
+									<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+										><path
+											stroke-linecap="round"
+											stroke-linejoin="round"
+											stroke-width="2"
+											d="M9 5l7 7-7 7"
+										/></svg
+									>
 								</button>
 							</div>
 							<!-- weekday header -->
@@ -526,19 +600,33 @@
 											{@const past = isDatePast(day)}
 											{@const sunday = isSunday(day)}
 											{@const beyond = isBeyondRange(day)}
-											{@const fullClosure = closureList.find((c) => c.date === ds && !c.startTime && !c.endTime)}
-											{@const hasTimeClosure = closureList.some((c) => c.date === ds && c.startTime && c.endTime)}
+											{@const fullClosure = closureList.find(
+												(c) => c.date === ds && !c.startTime && !c.endTime
+											)}
+											{@const hasTimeClosure = closureList.some(
+												(c) => c.date === ds && c.startTime && c.endTime
+											)}
 											{@const disabled = past || sunday || beyond || !!fullClosure}
 											{#if disabled}
-												<div class="flex h-12 w-full flex-col items-center justify-center rounded-lg text-sm
-													{fullClosure ? 'bg-[#f0dfdb]' : sunday ? 'bg-gray-50' : ''} cursor-not-allowed">
-													<span class="{fullClosure ? 'text-[#8c5656]/60' : sunday ? 'text-[#c08080]/50' : 'text-gray-300'}">{day}</span>
+												<div
+													class="flex h-12 w-full flex-col items-center justify-center rounded-lg text-sm
+													{fullClosure ? 'bg-[#f0dfdb]' : sunday ? 'bg-gray-50' : ''} cursor-not-allowed"
+												>
+													<span
+														class={fullClosure
+															? 'text-[#8c5656]/60'
+															: sunday
+																? 'text-[#c08080]/50'
+																: 'text-gray-300'}>{day}</span
+													>
 													{#if fullClosure}
 														<span class="mt-0.5 text-[8px] leading-none text-[#8c5656]">休</span>
 													{/if}
 												</div>
 											{:else}
-												<button type="button" on:click={() => (selectedDate = ds)}
+												<button
+													type="button"
+													on:click={() => (selectedDate = ds)}
 													class="flex h-12 w-full flex-col items-center justify-center rounded-lg text-sm transition-all
 													{selectedDate === ds
 														? 'bg-[#8F9E91] font-semibold text-white shadow-sm'
@@ -546,10 +634,16 @@
 															? 'bg-[#e8edf2] text-[#4c4640] hover:bg-[#dce3e9]'
 															: ds === todayStr
 																? 'font-semibold text-[#8F9E91] ring-1 ring-[#8F9E91]/40 hover:bg-[#f5f0eb]'
-																: 'text-[#4c4640] hover:bg-[#f5f0eb]'}">
+																: 'text-[#4c4640] hover:bg-[#f5f0eb]'}"
+												>
 													<span>{day}</span>
 													{#if hasTimeClosure}
-														<span class="mt-0.5 rounded-sm px-1 text-[8px] leading-tight {selectedDate === ds ? 'bg-white/20 text-white/80' : 'bg-[#e8edf2] text-[#6b7d8d]'}">部分休</span>
+														<span
+															class="mt-0.5 rounded-sm px-1 text-[8px] leading-tight {selectedDate ===
+															ds
+																? 'bg-white/20 text-white/80'
+																: 'bg-[#e8edf2] text-[#6b7d8d]'}">部分休</span
+														>
 													{/if}
 												</button>
 											{/if}
@@ -558,10 +652,21 @@
 								{/each}
 							</div>
 							<!-- legend -->
-							<div class="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-[10px] text-[#9b918a]">
-								<span class="flex items-center gap-1"><span class="inline-block h-2.5 w-2.5 rounded-sm bg-[#8F9E91]"></span>已選</span>
-								<span class="flex items-center gap-1"><span class="inline-block h-2.5 w-2.5 rounded-sm bg-[#fdf5f3] ring-1 ring-[#e8d5d0]"></span>公休</span>
-								<span class="flex items-center gap-1"><span class="inline-block h-2.5 w-2.5 rounded-sm bg-gray-50 ring-1 ring-gray-200"></span>週日</span>
+							<div
+								class="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-[10px] text-[#9b918a]"
+							>
+								<span class="flex items-center gap-1"
+									><span class="inline-block h-2.5 w-2.5 rounded-sm bg-[#8F9E91]"></span>已選</span
+								>
+								<span class="flex items-center gap-1"
+									><span
+										class="inline-block h-2.5 w-2.5 rounded-sm bg-[#fdf5f3] ring-1 ring-[#e8d5d0]"
+									></span>公休</span
+								>
+								<span class="flex items-center gap-1"
+									><span class="inline-block h-2.5 w-2.5 rounded-sm bg-gray-50 ring-1 ring-gray-200"
+									></span>週日</span
+								>
 							</div>
 						</div>
 
@@ -608,7 +713,9 @@
 						</div>
 
 						{#if partySize > 1}
-							<div class="mb-4 rounded-2xl border border-[#e3eadf] bg-[#f6faf4]/92 px-4 py-3 text-sm text-[#61705f]">
+							<div
+								class="mb-4 rounded-2xl border border-[#e3eadf] bg-[#f6faf4]/92 px-4 py-3 text-sm text-[#61705f]"
+							>
 								{partySize}人・{serviceSummary}・共 {totalDuration} 分鐘
 							</div>
 						{/if}
@@ -661,7 +768,9 @@
 								class="ml-4 flex flex-1 items-center justify-center gap-2 rounded-xl bg-[#8F9E91] px-8 py-3 font-medium text-white shadow-md transition-all hover:bg-[#7A8A7C] hover:shadow-lg disabled:cursor-not-allowed disabled:opacity-50"
 							>
 								{#if isSubmitting}
-									<div class="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"></div>
+									<div
+										class="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"
+									></div>
 									預約中...
 								{:else}
 									確認預約

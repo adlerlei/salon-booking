@@ -48,3 +48,47 @@ export const notificationStates = sqliteTable('notification_states', {
 		.notNull()
 		.$defaultFn(() => new Date())
 });
+
+export const announcements = sqliteTable('announcements', {
+	id: text('id')
+		.primaryKey()
+		.$defaultFn(() => crypto.randomUUID()),
+	title: text('title').notNull(),
+	content: text('content').notNull(),
+	status: text('status', { enum: ['draft', 'published'] })
+		.notNull()
+		.default('draft'),
+	startsAt: text('starts_at'),
+	endsAt: text('ends_at'),
+	isPinned: integer('is_pinned', { mode: 'boolean' }).notNull().default(false),
+	showOnBooking: integer('show_on_booking', { mode: 'boolean' }).notNull().default(false),
+	createdBy: text('created_by').notNull(),
+	createdAt: integer('created_at', { mode: 'timestamp' })
+		.notNull()
+		.$defaultFn(() => new Date()),
+	updatedAt: integer('updated_at', { mode: 'timestamp' })
+		.notNull()
+		.$defaultFn(() => new Date())
+});
+
+export const articles = sqliteTable('articles', {
+	id: text('id')
+		.primaryKey()
+		.$defaultFn(() => crypto.randomUUID()),
+	slug: text('slug').notNull().unique(),
+	title: text('title').notNull(),
+	excerpt: text('excerpt').notNull(),
+	content: text('content').notNull(),
+	coverImageUrl: text('cover_image_url'),
+	status: text('status', { enum: ['draft', 'published'] })
+		.notNull()
+		.default('draft'),
+	publishedAt: text('published_at'),
+	createdBy: text('created_by').notNull(),
+	createdAt: integer('created_at', { mode: 'timestamp' })
+		.notNull()
+		.$defaultFn(() => new Date()),
+	updatedAt: integer('updated_at', { mode: 'timestamp' })
+		.notNull()
+		.$defaultFn(() => new Date())
+});
