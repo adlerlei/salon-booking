@@ -605,27 +605,27 @@
 				</div>
 			</div>
 
-			<div class="flex items-center gap-3">
+			<div class="flex min-w-0 items-center gap-2 pl-3">
 				{#if profile?.pictureUrl}
 					<img
 						src={profile.pictureUrl}
 						alt="管理員頭像"
-						class="hidden h-10 w-10 rounded-full border border-white/70 object-cover shadow-sm sm:block"
+						class="hidden h-8 w-8 rounded-full border border-white/70 object-cover opacity-90 sm:block"
 					/>
 				{/if}
-				<div
-					class="rounded-full border border-[#d9cec3] bg-white/80 px-3 py-2 text-right shadow-sm"
-				>
-					<p class="text-[11px] tracking-[0.2em] text-[#9b9086]">
-						{authState === 'authorized'
-							? '已驗證'
-							: authState === 'forbidden'
-								? '拒絕存取'
-								: '驗證中'}
-					</p>
-					<p class="text-sm font-medium text-[#5c554f]">
-						{data.adminName || profile?.displayName || 'LINE 管理員'}
-					</p>
+				<div class="flex min-w-0 items-center gap-2 text-right">
+					<span
+						class={`h-2 w-2 shrink-0 rounded-full ${
+							authState === 'authorized'
+								? 'bg-[#8F9E91]'
+								: authState === 'forbidden'
+									? 'bg-[#b08080]'
+									: 'bg-[#c9b9aa]'
+						}`}
+					></span>
+					<span class="max-w-24 truncate text-sm font-medium text-[#6b625b] sm:max-w-36">
+						{data.adminName || profile?.displayName || '管理員'}
+					</span>
 				</div>
 			</div>
 		</div>
