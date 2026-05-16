@@ -5,12 +5,20 @@ import { initDb } from '$lib/server/db';
 import { announcements, articles } from '$lib/server/db/schema';
 import { listAdminAnnouncements, listAdminArticles } from '$lib/server/news';
 
-const slugRegex = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
-
 type ContentBody = Record<string, string | boolean | null | undefined>;
 
 const stringOrNull = (value: string | boolean | null | undefined) =>
 	typeof value === 'string' && value.trim() ? value.trim() : null;
+
+const buildArticleSlug = (title: string) => {
+	const normalized = title
+		.toLowerCase()
+		.trim()
+		.replace(/[^a-z0-9]+/g, '-')
+		.replace(/^-+|-+$/g, '');
+	const suffix = Date.now().toString(36);
+	return normalized ? `${normalized}-${suffix}` : `post-${suffix}`;
+};
 
 const requireAdmin = async (
 	locals: App.Locals,
@@ -54,20 +62,20 @@ export async function POST({ request, locals, platform }) {
 	const now = new Date();
 
 	if (body.type === 'announcement') {
-		const title = String(body.title || '').trim();
+		const title = String(body.title || '公告').trim();
 		const content = String(body.content || '').trim();
-		if (!title || !content) {
-			return json({ success: false, message: '公告標題與內容必填' }, { status: 400 });
+		if (!content) {
+			return json({ success: false, message: '公告內容必填' }, { status: 400 });
 		}
 
 		await db.insert(announcements).values({
 			title,
 			content,
-			status: body.status === 'published' ? 'published' : 'draft',
-			startsAt: stringOrNull(body.startsAt),
-			endsAt: stringOrNull(body.endsAt),
-			isPinned: Boolean(body.isPinned),
-			showOnBooking: Boolean(body.showOnBooking),
+			status: 'published',
+			startsAt: null,
+			endsAt: null,
+			isPinned: false,
+			showOnBooking: true,
 			createdBy: auth.lineUserId,
 			createdAt: now,
 			updatedAt: now
@@ -78,24 +86,12 @@ export async function POST({ request, locals, platform }) {
 
 	if (body.type === 'article') {
 		const title = String(body.title || '').trim();
-		const slug = String(body.slug || '')
-			.trim()
-			.toLowerCase();
+		const slug = buildArticleSlug(title);
 		const excerpt = String(body.excerpt || '').trim();
 		const content = String(body.content || '').trim();
 
 		if (!title || !slug || !excerpt || !content) {
-			return json(
-				{ success: false, message: '文章標題、網址代號、摘要與內容必填' },
-				{ status: 400 }
-			);
-		}
-
-		if (!slugRegex.test(slug)) {
-			return json(
-				{ success: false, message: '網址代號只能使用小寫英文、數字與連字號' },
-				{ status: 400 }
-			);
+			return json({ success: false, message: '文章標題、摘要與內容必填' }, { status: 400 });
 		}
 
 		await db.insert(articles).values({
@@ -103,10 +99,9 @@ export async function POST({ request, locals, platform }) {
 			slug,
 			excerpt,
 			content,
-			coverImageUrl: stringOrNull(body.coverImageUrl),
-			status: body.status === 'published' ? 'published' : 'draft',
-			publishedAt:
-				body.status === 'published' ? stringOrNull(body.publishedAt) || now.toISOString() : null,
+			coverImageUrl: null,
+			status: 'published',
+			publishedAt: now.toISOString(),
 			createdBy: auth.lineUserId,
 			createdAt: now,
 			updatedAt: now
@@ -130,10 +125,10 @@ export async function PATCH({ request, locals, platform }) {
 	const now = new Date();
 
 	if (body.type === 'announcement') {
-		const title = String(body.title || '').trim();
+		const title = String(body.title || '公告').trim();
 		const content = String(body.content || '').trim();
-		if (!title || !content) {
-			return json({ success: false, message: '公告標題與內容必填' }, { status: 400 });
+		if (!content) {
+			return json({ success: false, message: '公告內容必填' }, { status: 400 });
 		}
 
 		await db
@@ -141,11 +136,11 @@ export async function PATCH({ request, locals, platform }) {
 			.set({
 				title,
 				content,
-				status: body.status === 'published' ? 'published' : 'draft',
-				startsAt: stringOrNull(body.startsAt),
-				endsAt: stringOrNull(body.endsAt),
-				isPinned: Boolean(body.isPinned),
-				showOnBooking: Boolean(body.showOnBooking),
+				status: 'published',
+				startsAt: null,
+				endsAt: null,
+				isPinned: false,
+				showOnBooking: true,
 				updatedAt: now
 			})
 			.where(eq(announcements.id, id));
@@ -155,24 +150,17 @@ export async function PATCH({ request, locals, platform }) {
 
 	if (body.type === 'article') {
 		const title = String(body.title || '').trim();
-		const slug = String(body.slug || '')
-			.trim()
-			.toLowerCase();
 		const excerpt = String(body.excerpt || '').trim();
 		const content = String(body.content || '').trim();
-		if (!title || !slug || !excerpt || !content) {
-			return json(
-				{ success: false, message: '文章標題、網址代號、摘要與內容必填' },
-				{ status: 400 }
-			);
+		if (!title || !excerpt || !content) {
+			return json({ success: false, message: '文章標題、摘要與內容必填' }, { status: 400 });
 		}
 
-		if (!slugRegex.test(slug)) {
-			return json(
-				{ success: false, message: '網址代號只能使用小寫英文、數字與連字號' },
-				{ status: 400 }
-			);
-		}
+		const [existing] = await db
+			.select({ slug: articles.slug })
+			.from(articles)
+			.where(eq(articles.id, id));
+		const slug = existing?.slug || buildArticleSlug(title);
 
 		await db
 			.update(articles)
@@ -181,10 +169,9 @@ export async function PATCH({ request, locals, platform }) {
 				slug,
 				excerpt,
 				content,
-				coverImageUrl: stringOrNull(body.coverImageUrl),
-				status: body.status === 'published' ? 'published' : 'draft',
-				publishedAt:
-					body.status === 'published' ? stringOrNull(body.publishedAt) || now.toISOString() : null,
+				coverImageUrl: null,
+				status: 'published',
+				publishedAt: stringOrNull(body.publishedAt) || now.toISOString(),
 				updatedAt: now
 			})
 			.where(eq(articles.id, id));

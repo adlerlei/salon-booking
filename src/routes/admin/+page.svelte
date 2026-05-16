@@ -25,7 +25,7 @@
 		weekday: string;
 		records: BookingRecord[];
 	};
-	type AdminTab = 'agenda' | 'stats' | 'records' | 'closures' | 'content';
+	type AdminTab = 'agenda' | 'stats' | 'closures' | 'content';
 	type ClosureRecord = {
 		id: string;
 		date: string;
@@ -38,11 +38,7 @@
 		id: string;
 		title: string;
 		content: string;
-		status: 'draft' | 'published';
-		startsAt: string | null;
-		endsAt: string | null;
-		isPinned: boolean;
-		showOnBooking: boolean;
+		createdAt: Date | string;
 		updatedAt: Date | string;
 	};
 	type ArticleRecord = {
@@ -51,8 +47,6 @@
 		title: string;
 		excerpt: string;
 		content: string;
-		coverImageUrl: string | null;
-		status: 'draft' | 'published';
 		publishedAt: string | null;
 		updatedAt: Date | string;
 	};
@@ -76,21 +70,12 @@
 	let contentSubmitting = $state(false);
 
 	let announcementEditingId = $state<string | null>(null);
-	let announcementTitle = $state('');
 	let announcementContent = $state('');
-	let announcementStatus = $state<'draft' | 'published'>('published');
-	let announcementStartsAt = $state('');
-	let announcementEndsAt = $state('');
-	let announcementIsPinned = $state(false);
-	let announcementShowOnBooking = $state(true);
 
 	let articleEditingId = $state<string | null>(null);
 	let articleTitle = $state('');
-	let articleSlug = $state('');
 	let articleExcerpt = $state('');
 	let articleContent = $state('');
-	let articleCoverImageUrl = $state('');
-	let articleStatus = $state<'draft' | 'published'>('draft');
 
 	// Closure form state
 	const businessHours = (() => {
@@ -178,32 +163,16 @@
 		}
 	};
 
-	const normalizeSlug = (value: string) =>
-		value
-			.toLowerCase()
-			.trim()
-			.replace(/[^a-z0-9]+/g, '-')
-			.replace(/^-+|-+$/g, '');
-
 	const resetAnnouncementForm = () => {
 		announcementEditingId = null;
-		announcementTitle = '';
 		announcementContent = '';
-		announcementStatus = 'published';
-		announcementStartsAt = '';
-		announcementEndsAt = '';
-		announcementIsPinned = false;
-		announcementShowOnBooking = true;
 	};
 
 	const resetArticleForm = () => {
 		articleEditingId = null;
 		articleTitle = '';
-		articleSlug = '';
 		articleExcerpt = '';
 		articleContent = '';
-		articleCoverImageUrl = '';
-		articleStatus = 'draft';
 	};
 
 	const loadContent = async () => {
@@ -224,8 +193,8 @@
 	};
 
 	const saveAnnouncement = async () => {
-		if (!announcementTitle.trim() || !announcementContent.trim()) {
-			contentError = '公告標題與內容必填';
+		if (!announcementContent.trim()) {
+			contentError = '公告內容必填';
 			return;
 		}
 
@@ -236,13 +205,7 @@
 			const payload = {
 				type: 'announcement',
 				id: announcementEditingId,
-				title: announcementTitle,
-				content: announcementContent,
-				status: announcementStatus,
-				startsAt: announcementStartsAt || null,
-				endsAt: announcementEndsAt || null,
-				isPinned: announcementIsPinned,
-				showOnBooking: announcementShowOnBooking
+				content: announcementContent
 			};
 			const res = await fetch('/api/admin/content', {
 				method: announcementEditingId ? 'PATCH' : 'POST',
@@ -272,13 +235,7 @@
 	const editAnnouncement = (item: AnnouncementRecord) => {
 		contentMode = 'announcements';
 		announcementEditingId = item.id;
-		announcementTitle = item.title;
 		announcementContent = item.content;
-		announcementStatus = item.status;
-		announcementStartsAt = item.startsAt || '';
-		announcementEndsAt = item.endsAt || '';
-		announcementIsPinned = item.isPinned;
-		announcementShowOnBooking = item.showOnBooking;
 	};
 
 	const deleteAnnouncement = async (id: string) => {
@@ -300,9 +257,8 @@
 	};
 
 	const saveArticle = async () => {
-		const slug = normalizeSlug(articleSlug);
-		if (!articleTitle.trim() || !slug || !articleExcerpt.trim() || !articleContent.trim()) {
-			contentError = '文章標題、網址代號、摘要與內容必填';
+		if (!articleTitle.trim() || !articleExcerpt.trim() || !articleContent.trim()) {
+			contentError = '文章標題、摘要與內容必填';
 			return;
 		}
 
@@ -314,11 +270,10 @@
 				type: 'article',
 				id: articleEditingId,
 				title: articleTitle,
-				slug,
 				excerpt: articleExcerpt,
 				content: articleContent,
-				coverImageUrl: articleCoverImageUrl || null,
-				status: articleStatus
+				publishedAt:
+					articleRecords.find((item) => item.id === articleEditingId)?.publishedAt || null
 			};
 			const res = await fetch('/api/admin/content', {
 				method: articleEditingId ? 'PATCH' : 'POST',
@@ -349,11 +304,8 @@
 		contentMode = 'articles';
 		articleEditingId = item.id;
 		articleTitle = item.title;
-		articleSlug = item.slug;
 		articleExcerpt = item.excerpt;
 		articleContent = item.content;
-		articleCoverImageUrl = item.coverImageUrl || '';
-		articleStatus = item.status;
 	};
 
 	const deleteArticle = async (id: string) => {
@@ -399,9 +351,6 @@
 	const compareAsc = (left: BookingRecord, right: BookingRecord) =>
 		left.appointmentDate.localeCompare(right.appointmentDate);
 
-	const compareDesc = (left: BookingRecord, right: BookingRecord) =>
-		right.appointmentDate.localeCompare(left.appointmentDate);
-
 	const isPast = (dateTime: string) => parseDateTime(dateTime).getTime() < Date.now();
 
 	const isSameDay = (dateTime: string, target: Date) => {
@@ -428,16 +377,6 @@
 	}).format(new Date());
 
 	const formatTime = (dateTime: string) => dateTime.split('T')[1] || '';
-
-	const formatDate = (dateTime: string) => {
-		const d = parseDateTime(dateTime);
-		return d.toLocaleDateString('zh-TW', { month: 'numeric', day: 'numeric' });
-	};
-
-	const formatWeekday = (dateTime: string) => {
-		const d = parseDateTime(dateTime);
-		return d.toLocaleDateString('zh-TW', { weekday: 'short' });
-	};
 
 	const formatServiceSummary = (serviceStats: DashboardStats['day']['serviceStats']) => {
 		if (serviceStats.length === 0) return '目前沒有預約服務項目';
@@ -630,16 +569,6 @@
 	);
 
 	const agendaDayGroups = $derived(groupBookingsByDay(upcomingBookings));
-
-	const pastBookings = $derived(
-		confirmedBookings.filter((record) => isPast(record.appointmentDate)).sort(compareDesc)
-	);
-
-	const cancelledBookings = $derived(
-		records.filter((record) => record.status === 'cancelled').sort(compareDesc)
-	);
-
-	const todayUpcoming = $derived(upcomingBookings.filter((r) => isToday(r.appointmentDate)).length);
 </script>
 
 <svelte:head>
@@ -795,17 +724,6 @@
 						onclick={() => (activeTab = 'stats')}
 					>
 						統計
-					</button>
-					<button
-						type="button"
-						class={`shrink-0 rounded-full px-4 py-2 text-sm font-medium shadow-sm transition-colors ${
-							activeTab === 'records'
-								? 'bg-[#8F9E91] text-white'
-								: 'border border-[#dfd3c8] bg-white/82 text-[#5f5750]'
-						}`}
-						onclick={() => (activeTab = 'records')}
-					>
-						紀錄 {pastBookings.length + cancelledBookings.length}
 					</button>
 					<button
 						type="button"
@@ -981,108 +899,6 @@
 						</div>
 					{/if}
 				</section>
-			{:else if activeTab === 'records'}
-				<div class="mt-6 grid gap-4 xl:grid-cols-2">
-					<section
-						class="rounded-[30px] border border-white/60 bg-white/78 p-5 shadow-[0_24px_60px_rgba(74,69,64,0.08)] backdrop-blur-xl md:p-6"
-						in:fly={{ y: 18, duration: 350, easing: cubicOut }}
-					>
-						<div class="flex items-center justify-between gap-3">
-							<h2 class="text-xl font-semibold text-[#4c4640]">歷史</h2>
-							<span class="text-sm text-[#857c74]">{pastBookings.length} 筆</span>
-						</div>
-
-						{#if pastBookings.length > 0}
-							<div class="mt-4 space-y-3">
-								{#each pastBookings as record (record.id)}
-									{@const serviceItems = parseServicesJson(record)}
-									<div
-										class="rounded-[22px] border border-[#ece3d9] bg-[#fcfaf7]/84 p-4 shadow-sm"
-										in:fade
-									>
-										<div class="flex items-start justify-between gap-3">
-											<div class="min-w-0">
-												<div class="flex items-center gap-2">
-													<h3 class="text-base font-semibold text-[#59524c]">
-														{record.customerName}
-													</h3>
-													{#if (record.partySize ?? 1) > 1}
-														<span
-															class="rounded-full bg-[#8F9E91]/15 px-2 py-0.5 text-xs text-[#61705f]"
-														>
-															{record.partySize}人
-														</span>
-													{/if}
-												</div>
-												{#if serviceItems && serviceItems.length > 1}
-													<p class="mt-1 text-sm text-[#7f766f]">
-														{serviceItems.map((i) => i.service).join('・')}
-													</p>
-												{:else}
-													<p class="mt-1 text-sm text-[#7f766f]">{record.serviceType}</p>
-												{/if}
-											</div>
-											<span class="shrink-0 text-sm text-[#857c74]"
-												>{formatTime(record.appointmentDate)}</span
-											>
-										</div>
-										<p class="mt-2 text-xs text-[#6d655e]">
-											{record.appointmentDate.split('T')[0]} · {record.durationMinutes} 分鐘
-										</p>
-									</div>
-								{/each}
-							</div>
-						{:else}
-							<div
-								class="mt-4 rounded-[22px] border border-dashed border-[#ded2c6] bg-white/65 px-4 py-8 text-center text-[#7f766f]"
-							>
-								目前沒有紀錄
-							</div>
-						{/if}
-					</section>
-
-					<section
-						class="rounded-[30px] border border-white/60 bg-white/78 p-5 shadow-[0_24px_60px_rgba(74,69,64,0.08)] backdrop-blur-xl md:p-6"
-						in:fly={{ y: 18, duration: 380, easing: cubicOut }}
-					>
-						<div class="flex items-center justify-between gap-3">
-							<h2 class="text-xl font-semibold text-[#5e4e4c]">取消</h2>
-							<span class="text-sm text-[#a06f6f]">{cancelledBookings.length} 筆</span>
-						</div>
-
-						{#if cancelledBookings.length > 0}
-							<div class="mt-4 space-y-3">
-								{#each cancelledBookings as record (record.id)}
-									<div
-										class="rounded-[22px] border border-[#f0dfdb] bg-[#fbf5f4]/88 p-4 shadow-sm"
-										in:fade
-									>
-										<div class="flex items-start justify-between gap-3">
-											<div>
-												<h3 class="text-base font-semibold text-[#6a5a58] line-through">
-													{record.customerName}
-												</h3>
-												<p class="mt-1 text-sm text-[#8c7b79]">{record.serviceType}</p>
-											</div>
-											<span class="text-sm text-[#a06f6f]"
-												>{formatTime(record.appointmentDate)}</span
-											>
-										</div>
-										<p class="mt-2 text-xs text-[#7a6967]">
-											{record.appointmentDate.split('T')[0]}
-										</p>
-									</div>
-								{/each}
-							</div>
-						{:else}
-							<div
-								class="mt-4 rounded-[22px] border border-dashed border-[#e6d3cf] bg-white/65 px-4 py-8 text-center text-[#7f766f]"
-							>
-								目前沒有紀錄
-							</div>
-						{/if}
-					</section>
-				</div>
 			{:else if activeTab === 'closures'}
 				<section
 					class="mt-6 rounded-[30px] border border-white/60 bg-white/78 p-5 shadow-[0_24px_60px_rgba(74,69,64,0.08)] backdrop-blur-xl md:p-6"
@@ -1295,66 +1111,12 @@
 								</h3>
 								<div class="mt-4 space-y-3">
 									<label class="block">
-										<span class="text-sm font-medium text-[#5c554f]">標題</span>
-										<input
-											type="text"
-											bind:value={announcementTitle}
-											class="mt-1 w-full rounded-xl border border-[#dfd3c8] bg-white px-4 py-3 text-[#2C302E] focus:border-[#8F9E91] focus:outline-none"
-										/>
-									</label>
-									<label class="block">
 										<span class="text-sm font-medium text-[#5c554f]">內容</span>
 										<textarea
 											bind:value={announcementContent}
 											rows="5"
 											class="mt-1 w-full rounded-xl border border-[#dfd3c8] bg-white px-4 py-3 text-[#2C302E] focus:border-[#8F9E91] focus:outline-none"
 										></textarea>
-									</label>
-									<div class="grid grid-cols-2 gap-3">
-										<label class="block">
-											<span class="text-sm font-medium text-[#5c554f]">開始顯示</span>
-											<input
-												type="datetime-local"
-												bind:value={announcementStartsAt}
-												class="mt-1 w-full rounded-xl border border-[#dfd3c8] bg-white px-3 py-3 text-sm text-[#2C302E] focus:border-[#8F9E91] focus:outline-none"
-											/>
-										</label>
-										<label class="block">
-											<span class="text-sm font-medium text-[#5c554f]">結束顯示</span>
-											<input
-												type="datetime-local"
-												bind:value={announcementEndsAt}
-												class="mt-1 w-full rounded-xl border border-[#dfd3c8] bg-white px-3 py-3 text-sm text-[#2C302E] focus:border-[#8F9E91] focus:outline-none"
-											/>
-										</label>
-									</div>
-									<div class="flex flex-wrap gap-4 text-sm font-medium text-[#5c554f]">
-										<label class="flex items-center gap-2">
-											<input
-												type="checkbox"
-												bind:checked={announcementIsPinned}
-												class="h-4 w-4 rounded accent-[#8F9E91]"
-											/>
-											置頂
-										</label>
-										<label class="flex items-center gap-2">
-											<input
-												type="checkbox"
-												bind:checked={announcementShowOnBooking}
-												class="h-4 w-4 rounded accent-[#8F9E91]"
-											/>
-											顯示在預約頁
-										</label>
-									</div>
-									<label class="block">
-										<span class="text-sm font-medium text-[#5c554f]">狀態</span>
-										<select
-											bind:value={announcementStatus}
-											class="mt-1 w-full rounded-xl border border-[#dfd3c8] bg-white px-4 py-3 text-[#2C302E] focus:border-[#8F9E91] focus:outline-none"
-										>
-											<option value="published">發布</option>
-											<option value="draft">草稿</option>
-										</select>
 									</label>
 									<div class="flex gap-2">
 										<button
@@ -1363,7 +1125,11 @@
 											disabled={contentSubmitting}
 											class="flex-1 rounded-xl bg-[#8F9E91] px-6 py-3 font-medium text-white shadow-sm transition-all hover:bg-[#7A8A7C] disabled:opacity-50"
 										>
-											{contentSubmitting ? '儲存中...' : '儲存公告'}
+											{contentSubmitting
+												? '發布中...'
+												: announcementEditingId
+													? '更新公告'
+													: '發布公告'}
 										</button>
 										{#if announcementEditingId}
 											<button
@@ -1383,14 +1149,8 @@
 									<div class="rounded-[22px] border border-[#ece3d9] bg-white/82 p-4 shadow-sm">
 										<div class="flex items-start justify-between gap-3">
 											<div>
-												<p class="font-semibold text-[#4c4640]">{item.title}</p>
-												<p class="mt-1 line-clamp-2 text-sm whitespace-pre-line text-[#7a7169]">
+												<p class="line-clamp-3 text-sm whitespace-pre-line text-[#4c4640]">
 													{item.content}
-												</p>
-												<p class="mt-2 text-xs text-[#9b9086]">
-													{item.status === 'published' ? '已發布' : '草稿'}
-													{item.showOnBooking ? ' · 預約頁顯示' : ''}
-													{item.isPinned ? ' · 置頂' : ''}
 												</p>
 											</div>
 											<div class="flex shrink-0 gap-2">
@@ -1434,24 +1194,6 @@
 										/>
 									</label>
 									<label class="block">
-										<span class="text-sm font-medium text-[#5c554f]">網址代號</span>
-										<input
-											type="text"
-											bind:value={articleSlug}
-											placeholder="hair-care-after-color"
-											class="mt-1 w-full rounded-xl border border-[#dfd3c8] bg-white px-4 py-3 text-[#2C302E] placeholder:text-[#c4b8ac] focus:border-[#8F9E91] focus:outline-none"
-											onblur={() => (articleSlug = normalizeSlug(articleSlug))}
-										/>
-									</label>
-									<label class="block">
-										<span class="text-sm font-medium text-[#5c554f]">封面圖網址（選填）</span>
-										<input
-											type="url"
-											bind:value={articleCoverImageUrl}
-											class="mt-1 w-full rounded-xl border border-[#dfd3c8] bg-white px-4 py-3 text-[#2C302E] focus:border-[#8F9E91] focus:outline-none"
-										/>
-									</label>
-									<label class="block">
 										<span class="text-sm font-medium text-[#5c554f]">摘要</span>
 										<textarea
 											bind:value={articleExcerpt}
@@ -1467,16 +1209,6 @@
 											class="mt-1 w-full rounded-xl border border-[#dfd3c8] bg-white px-4 py-3 text-[#2C302E] focus:border-[#8F9E91] focus:outline-none"
 										></textarea>
 									</label>
-									<label class="block">
-										<span class="text-sm font-medium text-[#5c554f]">狀態</span>
-										<select
-											bind:value={articleStatus}
-											class="mt-1 w-full rounded-xl border border-[#dfd3c8] bg-white px-4 py-3 text-[#2C302E] focus:border-[#8F9E91] focus:outline-none"
-										>
-											<option value="draft">草稿</option>
-											<option value="published">發布</option>
-										</select>
-									</label>
 									<div class="flex gap-2">
 										<button
 											type="button"
@@ -1484,7 +1216,7 @@
 											disabled={contentSubmitting}
 											class="flex-1 rounded-xl bg-[#8F9E91] px-6 py-3 font-medium text-white shadow-sm transition-all hover:bg-[#7A8A7C] disabled:opacity-50"
 										>
-											{contentSubmitting ? '儲存中...' : '儲存文章'}
+											{contentSubmitting ? '發布中...' : articleEditingId ? '更新文章' : '發布文章'}
 										</button>
 										{#if articleEditingId}
 											<button
@@ -1506,9 +1238,6 @@
 											<div class="min-w-0">
 												<p class="font-semibold text-[#4c4640]">{item.title}</p>
 												<p class="mt-1 text-sm text-[#7a7169]">{item.excerpt}</p>
-												<p class="mt-2 text-xs text-[#9b9086]">
-													{item.status === 'published' ? '已發布' : '草稿'} · /news/{item.slug}
-												</p>
 											</div>
 											<div class="flex shrink-0 gap-2">
 												<button
