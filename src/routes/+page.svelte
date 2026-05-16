@@ -352,14 +352,19 @@
 				{#if data.announcements?.[0]}
 					<a
 						href={resolve('/announcements')}
-						class="flex overflow-hidden rounded-full border border-[#eadfd4] bg-white shadow-sm"
+						class="block overflow-hidden rounded-2xl border border-[#e6ddd3] bg-white shadow-sm transition-colors hover:border-[#8F9E91]"
 					>
-						<span class="shrink-0 bg-[#8F9E91] px-4 py-2 text-sm font-semibold text-white"
-							>公告</span
-						>
-						<span class="marquee-track min-w-0 flex-1 py-2 text-sm text-[#5f5750]">
-							<span>{data.announcements[0].content}</span>
-						</span>
+						<div class="flex min-h-12 items-center">
+							<div class="self-stretch bg-[#8F9E91] px-0.5"></div>
+							<div class="shrink-0 px-3">
+								<span class="text-xs font-semibold tracking-[0.18em] text-[#61705f]">公告</span>
+							</div>
+							<div
+								class="marquee-track min-w-0 flex-1 border-l border-[#eee7df] py-3 text-sm text-[#4f4842]"
+							>
+								<span>{data.announcements[0].content}</span>
+							</div>
+						</div>
 					</a>
 				{/if}
 
@@ -774,19 +779,19 @@
 
 <style>
 	.marquee-track {
+		overflow: hidden;
 		white-space: nowrap;
 	}
 
 	.marquee-track span {
 		display: inline-block;
-		min-width: 100%;
-		padding-left: 100%;
+		padding-left: 1.5rem;
 		animation: announcement-marquee 18s linear infinite;
 	}
 
 	@keyframes announcement-marquee {
 		0% {
-			transform: translateX(0);
+			transform: translateX(100%);
 		}
 		100% {
 			transform: translateX(-100%);
