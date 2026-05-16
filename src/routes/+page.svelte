@@ -349,31 +349,18 @@
 				<input type="hidden" name="servicesJson" value={servicesJsonValue} />
 				<input type="hidden" name="appointmentDate" value="{selectedDate}T{selectedTime}" />
 
-				{#if data.announcements?.length}
-					<section class="space-y-3">
-						{#each data.announcements.slice(0, 2) as announcement}
-							<a
-								href={resolve('/news')}
-								class="block rounded-2xl border border-[#eadfd4] bg-white p-4 shadow-sm transition-colors hover:border-[#8F9E91]"
-							>
-								<div class="flex items-start gap-3">
-									<span
-										class="mt-0.5 shrink-0 rounded-full bg-[#8F9E91]/12 px-2 py-1 text-[11px] font-semibold text-[#61705f]"
-									>
-										公告
-									</span>
-									<div class="min-w-0">
-										<p class="font-semibold text-[#3f3934]">{announcement.title}</p>
-										<p
-											class="mt-1 line-clamp-2 text-sm leading-6 whitespace-pre-line text-[#746b63]"
-										>
-											{announcement.content}
-										</p>
-									</div>
-								</div>
-							</a>
-						{/each}
-					</section>
+				{#if data.announcements?.[0]}
+					<a
+						href={resolve('/announcements')}
+						class="flex overflow-hidden rounded-full border border-[#eadfd4] bg-white shadow-sm"
+					>
+						<span class="shrink-0 bg-[#8F9E91] px-4 py-2 text-sm font-semibold text-white"
+							>公告</span
+						>
+						<span class="marquee-track min-w-0 flex-1 py-2 text-sm text-[#5f5750]">
+							<span>{data.announcements[0].content}</span>
+						</span>
+					</a>
 				{/if}
 
 				<!-- Progress Indicator -->
@@ -784,3 +771,25 @@
 		{/if}
 	</main>
 </div>
+
+<style>
+	.marquee-track {
+		white-space: nowrap;
+	}
+
+	.marquee-track span {
+		display: inline-block;
+		min-width: 100%;
+		padding-left: 100%;
+		animation: announcement-marquee 18s linear infinite;
+	}
+
+	@keyframes announcement-marquee {
+		0% {
+			transform: translateX(0);
+		}
+		100% {
+			transform: translateX(-100%);
+		}
+	}
+</style>
