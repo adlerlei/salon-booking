@@ -6,8 +6,8 @@
 
 ## 版本資訊
 
-- 文件 / 專案版本：`v0.2.4`
-- 本次同步內容：公告頁改為簡潔標題列與分隔式公告清單
+- 文件 / 專案版本：`v0.1.0`
+- 本次同步內容：月曆日期選擇、公休複選、12 小時制、後台版本號顯示
 
 ---
 
@@ -75,9 +75,6 @@ npm run deploy:prod
 | `/booking-success` | 預約成功頁（✅ 已完成）                        |
 | `/my-bookings`     | 個人預約列表 + 取消功能（✅ 已完成）           |
 | `/admin`           | 管理後台（✅ LINE 登入 + 管理員白名單）        |
-| `/announcements`   | 公告列表頁                                     |
-| `/column`          | 五十專欄文章列表頁                             |
-| `/column/[slug]`   | 五十專欄文章詳情頁                             |
 
 ---
 
@@ -89,9 +86,9 @@ npm run deploy:prod
   `https://liff.line.me/2009342816-q0rukZhq/my-bookings`
 - **管理員專屬後台 (需加入權限白名單)**:
   `https://salon-booking-a01.pages.dev/admin`
-- **公告頁 (綁定於 LINE 圖文選單)**:
+- **公告**:
   `https://liff.line.me/2009342816-q0rukZhq/announcements`
-- **五十專欄 (綁定於 LINE 圖文選單)**:
+- **五十專欄**:
   `https://liff.line.me/2009342816-q0rukZhq/column`
 
 ---
