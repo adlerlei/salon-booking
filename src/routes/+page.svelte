@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, tick } from 'svelte';
 	import { resolve } from '$app/paths';
 	import { enhance } from '$app/forms';
 	import { goto } from '$app/navigation';
@@ -12,6 +12,14 @@
 	let accessToken = '';
 	let error = '';
 	let isSubmitting = false;
+	let marqueeTrack: HTMLDivElement | null = null;
+	let marqueeOverflows = false;
+
+	const updateMarquee = () => {
+		const span = marqueeTrack?.querySelector('span');
+		if (!span || !marqueeTrack) return;
+		marqueeOverflows = span.scrollWidth > marqueeTrack.clientWidth + 1;
+	};
 
 	const handleEnhance = () => {
 		isSubmitting = true;
@@ -34,6 +42,9 @@
 	};
 
 	onMount(async () => {
+		window.addEventListener('resize', updateMarquee);
+		tick().then(updateMarquee);
+
 		try {
 			const liffModule = await import('@line/liff');
 			const liff = liffModule.default;
@@ -56,7 +67,13 @@
 				freshClosures = json.closures;
 			}
 		} catch {}
+
+		return () => window.removeEventListener('resize', updateMarquee);
 	});
+
+	$: if (data.announcements?.[0]) {
+		tick().then(updateMarquee);
+	}
 
 	// Services
 	const services = [
@@ -330,6 +347,31 @@
 	</header>
 
 	<main class="mx-auto mt-4 max-w-lg p-6">
+		{#if data.announcements?.[0]}
+			<a
+				href={resolve('/announcements')}
+				class="mb-8 block overflow-hidden rounded-2xl border border-[#e6ddd3] bg-white shadow-sm transition-colors hover:border-[#8F9E91]"
+			>
+				<div class="flex min-h-12 items-center">
+					<div class="self-stretch bg-[#8F9E91] px-0.5"></div>
+					<div class="shrink-0 px-3">
+						<span class="text-xs font-semibold tracking-[0.18em] text-[#61705f]">公告</span>
+					</div>
+					<div
+						class="marquee-track min-w-0 flex-1 border-l border-[#eee7df] py-3 text-sm text-[#4f4842]"
+						bind:this={marqueeTrack}
+					>
+						<div class="marquee-inner" class:is-scrolling={marqueeOverflows}>
+							<span>{data.announcements[0].content}</span>
+							{#if marqueeOverflows}
+								<span aria-hidden="true">{data.announcements[0].content}</span>
+							{/if}
+						</div>
+					</div>
+				</div>
+			</a>
+		{/if}
+
 		{#if error}
 			<div class="mb-6 rounded-xl border border-red-100 bg-red-50 p-4 text-red-600">
 				<p class="font-medium">發生錯誤</p>
@@ -348,25 +390,6 @@
 				<input type="hidden" name="partySize" value={partySize} />
 				<input type="hidden" name="servicesJson" value={servicesJsonValue} />
 				<input type="hidden" name="appointmentDate" value="{selectedDate}T{selectedTime}" />
-
-				{#if data.announcements?.[0]}
-					<a
-						href={resolve('/announcements')}
-						class="block overflow-hidden rounded-2xl border border-[#e6ddd3] bg-white shadow-sm transition-colors hover:border-[#8F9E91]"
-					>
-						<div class="flex min-h-12 items-center">
-							<div class="self-stretch bg-[#8F9E91] px-0.5"></div>
-							<div class="shrink-0 px-3">
-								<span class="text-xs font-semibold tracking-[0.18em] text-[#61705f]">公告</span>
-							</div>
-							<div
-								class="marquee-track min-w-0 flex-1 border-l border-[#eee7df] py-3 text-sm text-[#4f4842]"
-							>
-								<span>{data.announcements[0].content}</span>
-							</div>
-						</div>
-					</a>
-				{/if}
 
 				<!-- Progress Indicator -->
 				<div class="mb-8 flex items-center justify-between px-2">
@@ -783,18 +806,25 @@
 		white-space: nowrap;
 	}
 
-	.marquee-track span {
-		display: inline-block;
-		padding-left: 1.5rem;
+	.marquee-inner {
+		display: inline-flex;
+		width: max-content;
+	}
+
+	.marquee-inner.is-scrolling {
 		animation: announcement-marquee 18s linear infinite;
 	}
 
+	.marquee-inner span {
+		padding-left: 1.5rem;
+	}
+
 	@keyframes announcement-marquee {
-		0% {
-			transform: translateX(100%);
+		from {
+			transform: translateX(0);
 		}
-		100% {
-			transform: translateX(-100%);
+		to {
+			transform: translateX(-50%);
 		}
 	}
 </style>
