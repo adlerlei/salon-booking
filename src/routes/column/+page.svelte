@@ -15,14 +15,14 @@
 </script>
 
 <svelte:head>
-	<title>五十專欄 — 五十郎</title>
-	<meta name="description" content="五十郎髮型保養與技術文章。" />
+	<title>髮藝專欄 — Jo造型髮藝</title>
+	<meta name="description" content="Jo造型髮藝髮型保養與技術文章。" />
 </svelte:head>
 
 <div class="min-h-screen bg-[#F9F8F6] pb-16 text-[#2C302E]">
 	<header class="sticky top-0 z-10 border-b border-[#eee7df] bg-white/90 px-5 py-5 backdrop-blur">
 		<div class="mx-auto max-w-3xl">
-			<h1 class="mt-1 text-2xl font-semibold">五十專欄</h1>
+			<h1 class="mt-1 text-2xl font-semibold">髮藝專欄</h1>
 		</div>
 	</header>
 

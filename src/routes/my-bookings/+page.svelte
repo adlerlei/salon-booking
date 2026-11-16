@@ -131,7 +131,7 @@
 </script>
 
 <svelte:head>
-	<title>我的預約 — 五十郎 專屬預約</title>
+	<title>我的預約 — Jo造型髮藝 專屬預約</title>
 </svelte:head>
 
 <div class="min-h-screen bg-[#F9F8F6] pb-24 font-sans text-[#2C302E] selection:bg-[#8F9E91] selection:text-white">

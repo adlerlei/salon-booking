@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount, tick } from 'svelte';
+	import { onMount } from 'svelte';
 	import { resolve } from '$app/paths';
 	import { enhance } from '$app/forms';
 	import { goto } from '$app/navigation';
@@ -12,14 +12,7 @@
 	let accessToken = '';
 	let error = '';
 	let isSubmitting = false;
-	let marqueeTrack: HTMLDivElement | null = null;
-	let marqueeOverflows = false;
-
-	const updateMarquee = () => {
-		const span = marqueeTrack?.querySelector('span');
-		if (!span || !marqueeTrack) return;
-		marqueeOverflows = span.scrollWidth > marqueeTrack.clientWidth + 1;
-	};
+	let isMarqueePaused = false;
 
 	const handleEnhance = () => {
 		isSubmitting = true;
@@ -42,9 +35,6 @@
 	};
 
 	onMount(async () => {
-		window.addEventListener('resize', updateMarquee);
-		tick().then(updateMarquee);
-
 		try {
 			const liffModule = await import('@line/liff');
 			const liff = liffModule.default;
@@ -67,13 +57,7 @@
 				freshClosures = json.closures;
 			}
 		} catch {}
-
-		return () => window.removeEventListener('resize', updateMarquee);
 	});
-
-	$: if (data.announcements?.[0]) {
-		tick().then(updateMarquee);
-	}
 
 	// Services
 	const services = [
@@ -221,7 +205,7 @@
 
 	const generateSlots = () => {
 		const slots = [];
-		for (let hour = 11; hour < 20; hour++) {
+		for (let hour = 11; hour <= 20; hour++) {
 			slots.push(`${hour}:00`);
 			slots.push(`${hour}:30`);
 		}
@@ -256,7 +240,7 @@
 		const endSlotMinutes = slotMinutes + totalDuration;
 		const now = getCurrentDateTime();
 
-		if (endSlotMinutes > 20 * 60) return { time: slot, available: false };
+		if (endSlotMinutes > 21 * 60) return { time: slot, available: false };
 
 		if (selectedDate === now.date && slotMinutes <= timeToMinutes(now.time)) {
 			return { time: slot, available: false };
@@ -321,6 +305,10 @@
 	}
 </script>
 
+<svelte:head>
+	<title>Jo造型髮藝 專屬預約</title>
+</svelte:head>
+
 <div
 	class="min-h-screen bg-[#F9F8F6] pb-20 font-sans text-[#2C302E] selection:bg-[#8F9E91] selection:text-white"
 >
@@ -329,7 +317,7 @@
 			class="font-serif text-2xl font-semibold tracking-wide"
 			style="font-family: 'Playfair Display', serif;"
 		>
-			五十郎 專屬預約
+			Jo造型髮藝 專屬預約
 		</h1>
 
 		{#if profile}
@@ -348,31 +336,51 @@
 
 	<main class="mx-auto mt-4 max-w-lg p-6">
 		{#if data.announcements?.[0]}
-			<a
-				href={resolve('/announcements')}
-				class="mb-8 block overflow-hidden rounded-2xl border border-[#e6ddd3] bg-white shadow-sm transition-colors hover:border-[#8F9E91]"
+			<div
+				class="mb-8 flex overflow-hidden rounded-2xl border border-[#e6ddd3] bg-white shadow-sm transition-colors hover:border-[#8F9E91]"
 			>
-				<div class="flex min-h-12 items-center">
+				<a
+					href={resolve('/announcements')}
+					class="marquee-link flex min-h-12 min-w-0 flex-1 items-center"
+				>
 					<div class="self-stretch bg-[#8F9E91] px-0.5"></div>
 					<div class="shrink-0 px-3">
 						<span class="text-xs font-semibold tracking-[0.18em] text-[#61705f]">公告</span>
 					</div>
 					<div
 						class="marquee-track min-w-0 flex-1 border-l border-[#eee7df] py-3 text-sm text-[#4f4842]"
-						bind:this={marqueeTrack}
 					>
-						<div class="marquee-inner" class:is-scrolling={marqueeOverflows}>
+						<div class="marquee-inner" class:is-paused={isMarqueePaused}>
 							<span>{data.announcements[0].content}</span>
-							{#if marqueeOverflows}
-								<span aria-hidden="true">{data.announcements[0].content}</span>
-							{/if}
+							<span aria-hidden="true">{data.announcements[0].content}</span>
 						</div>
 					</div>
-				</div>
-			</a>
+				</a>
+				<button
+					type="button"
+					on:click={() => (isMarqueePaused = !isMarqueePaused)}
+					aria-label={isMarqueePaused ? '播放公告輪播' : '暫停公告輪播'}
+					class="flex shrink-0 items-center justify-center border-l border-[#eee7df] px-3 text-[#7f766f] transition-colors hover:bg-[#f9f6f3] hover:text-[#4f4842]"
+				>
+					{#if isMarqueePaused}
+						<svg class="h-4 w-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+							<path d="M8 5.14v14l11-7-11-7z" />
+						</svg>
+					{:else}
+						<svg class="h-4 w-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+							<path d="M7 5h4v14H7V5zm6 0h4v14h-4V5z" />
+						</svg>
+					{/if}
+				</button>
+			</div>
 		{/if}
 
-		{#if error}
+		{#if data.loadError}
+			<div class="mb-6 rounded-xl border border-amber-200 bg-amber-50 p-4 text-amber-800">
+				<p class="font-medium">預約系統暫時無法連線</p>
+				<p class="mt-1 text-sm opacity-90">{data.loadError}</p>
+			</div>
+		{:else if error}
 			<div class="mb-6 rounded-xl border border-red-100 bg-red-50 p-4 text-red-600">
 				<p class="font-medium">發生錯誤</p>
 				<p class="text-sm opacity-90">{error}</p>
@@ -802,6 +810,7 @@
 
 <style>
 	.marquee-track {
+		container-type: inline-size;
 		overflow: hidden;
 		white-space: nowrap;
 	}
@@ -811,12 +820,22 @@
 		width: max-content;
 	}
 
-	.marquee-inner.is-scrolling {
-		animation: announcement-marquee 18s linear infinite;
+	@media (prefers-reduced-motion: no-preference) {
+		.marquee-inner {
+			animation: announcement-marquee 18s linear infinite;
+		}
+
+		.marquee-link:hover .marquee-inner,
+		.marquee-link:focus-visible .marquee-inner,
+		.marquee-inner.is-paused {
+			animation-play-state: paused;
+		}
 	}
 
 	.marquee-inner span {
-		padding-left: 1.5rem;
+		flex: none;
+		min-width: 100cqi;
+		padding-inline: 1.5rem 2.5rem;
 	}
 
 	@keyframes announcement-marquee {

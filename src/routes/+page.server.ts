@@ -1,9 +1,10 @@
-import { initDb } from '$lib/server/db';
+import { getDbErrorMessage, initDb } from '$lib/server/db';
 import { appointments, closures } from '$lib/server/db/schema';
-import { eq, gte } from 'drizzle-orm';
+import { and, eq, gte, lt } from 'drizzle-orm';
 import { verifyLineAccessToken } from '$lib/server/auth/line';
 import { notifyAdminsAboutNewBooking } from '$lib/server/notifications/line';
 import { listActiveAnnouncements } from '$lib/server/news';
+import { toTaipeiNowString } from '$lib/server/time';
 
 // 服務對應的時間（分鐘）
 const serviceDurations: Record<string, number> = {
@@ -21,23 +22,9 @@ const serviceDurations: Record<string, number> = {
 	'護髮+剪髮+洗髮': 60
 };
 
-const toTaipeiNowString = () => {
-	const formatter = new Intl.DateTimeFormat('sv-SE', {
-		timeZone: 'Asia/Taipei',
-		year: 'numeric',
-		month: '2-digit',
-		day: '2-digit',
-		hour: '2-digit',
-		minute: '2-digit',
-		hourCycle: 'h23'
-	});
-
-	const parts = Object.fromEntries(
-		formatter.formatToParts(new Date()).map((part) => [part.type, part.value])
-	);
-
-	return `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}`;
-};
+const OPEN_MINUTES = 11 * 60;
+const LATEST_BOOKING_MINUTES = 20 * 60 + 30;
+const CLOSE_MINUTES = 21 * 60;
 
 const timeToMinutes = (timeStr: string) => {
 	const [hours, minutes] = timeStr.split(':').map(Number);
@@ -45,34 +32,45 @@ const timeToMinutes = (timeStr: string) => {
 };
 
 export const load = async ({ platform }) => {
-	const db = initDb(platform);
-	const today = toTaipeiNowString().split('T')[0];
+	try {
+		const db = initDb(platform);
+		const today = toTaipeiNowString().split('T')[0];
 
-	const [allAppointments, allClosures, bookingAnnouncements] = await Promise.all([
-		db
-			.select({
-				appointmentDate: appointments.appointmentDate,
-				durationMinutes: appointments.durationMinutes
-			})
-			.from(appointments)
-			.where(eq(appointments.status, 'confirmed')),
-		db
-			.select({
-				date: closures.date,
-				startTime: closures.startTime,
-				endTime: closures.endTime,
-				reason: closures.reason
-			})
-			.from(closures)
-			.where(gte(closures.date, today)),
-		listActiveAnnouncements(platform, true)
-	]);
+		const [allAppointments, allClosures, bookingAnnouncements] = await Promise.all([
+			db
+				.select({
+					appointmentDate: appointments.appointmentDate,
+					durationMinutes: appointments.durationMinutes
+				})
+				.from(appointments)
+				.where(and(eq(appointments.status, 'confirmed'), gte(appointments.appointmentDate, today))),
+			db
+				.select({
+					date: closures.date,
+					startTime: closures.startTime,
+					endTime: closures.endTime,
+					reason: closures.reason
+				})
+				.from(closures)
+				.where(gte(closures.date, today)),
+			listActiveAnnouncements(platform, true)
+		]);
 
-	return {
-		appointments: allAppointments,
-		closures: allClosures,
-		announcements: bookingAnnouncements
-	};
+		return {
+			appointments: allAppointments,
+			closures: allClosures,
+			announcements: bookingAnnouncements,
+			loadError: ''
+		};
+	} catch (err) {
+		console.error('Failed to load booking page data:', err);
+		return {
+			appointments: [],
+			closures: [],
+			announcements: [],
+			loadError: getDbErrorMessage(err, '系統資料載入失敗，請稍後再試。')
+		};
+	}
 };
 
 type ServiceItem = { service: string; duration: number };
@@ -124,6 +122,10 @@ export const actions = {
 			const serviceType = serviceItems.map((item) => item.service).join('・');
 			const servicesJson = JSON.stringify(serviceItems);
 
+			if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(appointmentDate)) {
+				return { success: false, message: '預約日期時間格式錯誤' };
+			}
+
 			const profile = await verifyLineAccessToken(accessToken);
 			const db = initDb(platform);
 			const nowInTaipei = toTaipeiNowString();
@@ -133,8 +135,21 @@ export const actions = {
 			}
 
 			const [selectedDate, selectedTime] = appointmentDate.split('T');
+			const [year, month, day] = selectedDate.split('-').map(Number);
+			if (new Date(year, month - 1, day).getDay() === 0) {
+				return { success: false, message: '週日公休，無法預約' };
+			}
+
 			const selectedStartMinutes = timeToMinutes(selectedTime);
 			const selectedEndMinutes = selectedStartMinutes + durationMinutes;
+
+			if (
+				selectedStartMinutes < OPEN_MINUTES ||
+				selectedStartMinutes > LATEST_BOOKING_MINUTES ||
+				selectedEndMinutes > CLOSE_MINUTES
+			) {
+				return { success: false, message: '請選擇營業時間（11:00–21:00）內可完成的時段' };
+			}
 
 			const dateClosures = await db
 				.select({ date: closures.date, startTime: closures.startTime, endTime: closures.endTime })
@@ -160,7 +175,13 @@ export const actions = {
 					durationMinutes: appointments.durationMinutes
 				})
 				.from(appointments)
-				.where(eq(appointments.status, 'confirmed'));
+				.where(
+					and(
+						eq(appointments.status, 'confirmed'),
+						gte(appointments.appointmentDate, `${selectedDate}T`),
+						lt(appointments.appointmentDate, `${selectedDate}T\uffff`)
+					)
+				);
 
 			const hasConflict = existingAppointments.some(
 				(booking: { appointmentDate: string; durationMinutes: number }) => {

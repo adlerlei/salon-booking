@@ -80,9 +80,9 @@
 	// Closure form state
 	const businessHours = (() => {
 		const times: string[] = [];
-		for (let h = 11; h <= 20; h++) {
+		for (let h = 11; h <= 21; h++) {
 			times.push(`${String(h).padStart(2, '0')}:00`);
-			if (h < 20) times.push(`${String(h).padStart(2, '0')}:30`);
+			if (h < 21) times.push(`${String(h).padStart(2, '0')}:30`);
 		}
 		return times;
 	})();
@@ -91,10 +91,13 @@
 		const p = h < 12 ? '上午' : '下午';
 		return `${p} ${h === 0 ? 12 : h > 12 ? h - 12 : h}:${String(m).padStart(2, '0')}`;
 	};
+	const formatLocalDate = (date = new Date()) =>
+		`${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+	const todayStr = formatLocalDate();
 	let closureDates = $state<string[]>([]);
 	let closureIsFullDay = $state(true);
 	let closureStartTime = $state('11:00');
-	let closureEndTime = $state('20:00');
+	let closureEndTime = $state('21:00');
 	let closureReason = $state('');
 	let closureSubmitting = $state(false);
 	let closureError = $state('');
@@ -328,7 +331,7 @@
 
 	const upcomingClosures = $derived(
 		closureRecords
-			.filter((c) => c.date >= new Date().toISOString().split('T')[0])
+			.filter((c) => c.date >= todayStr)
 			.sort(
 				(a, b) =>
 					a.date.localeCompare(b.date) || (a.startTime || '').localeCompare(b.startTime || '')
@@ -336,9 +339,7 @@
 	);
 
 	const pastClosures = $derived(
-		closureRecords
-			.filter((c) => c.date < new Date().toISOString().split('T')[0])
-			.sort((a, b) => b.date.localeCompare(a.date))
+		closureRecords.filter((c) => c.date < todayStr).sort((a, b) => b.date.localeCompare(a.date))
 	);
 
 	const parseDateTime = (dateTime: string) => {
@@ -488,6 +489,25 @@
 		}
 	};
 
+	const REAUTH_ATTEMPTED_KEY = 'admin_liff_reauth_attempted';
+
+	const retryLineLogin = async () => {
+		loading = true;
+		error = '';
+		try {
+			const liffModule = await import('@line/liff');
+			const liff = liffModule.default;
+			await liff.init({ liffId });
+			if (liff.isLoggedIn()) {
+				liff.logout();
+			}
+			liff.login({ redirectUri: window.location.href });
+		} catch (err) {
+			error = err instanceof Error ? err.message : '重新登入失敗，請稍後再試';
+			loading = false;
+		}
+	};
+
 	onMount(async () => {
 		isMounted = true;
 
@@ -498,18 +518,40 @@
 			await liff.init({ liffId });
 
 			if (!liff.isLoggedIn()) {
-				if (authState === 'needs-session') {
+				if (data.authState === 'needs-session') {
+					loading = true;
 					liff.login({ redirectUri: window.location.href });
 				}
 				return;
 			}
 
-			profile = await liff.getProfile();
+			try {
+				profile = await liff.getProfile();
+			} catch (err) {
+				if (data.authState === 'needs-session' && !sessionStorage.getItem(REAUTH_ATTEMPTED_KEY)) {
+					sessionStorage.setItem(REAUTH_ATTEMPTED_KEY, '1');
+					liff.logout();
+					liff.login({ redirectUri: window.location.href });
+					return;
+				}
+				throw err;
+			}
 
-			if (authState === 'needs-session') {
+			if (data.authState === 'needs-session') {
 				loading = true;
 				syncingSession = true;
-				await syncSession(liff.getAccessToken() || '');
+				try {
+					await syncSession(liff.getAccessToken() || '');
+				} catch (err) {
+					if (!sessionStorage.getItem(REAUTH_ATTEMPTED_KEY)) {
+						sessionStorage.setItem(REAUTH_ATTEMPTED_KEY, '1');
+						liff.logout();
+						liff.login({ redirectUri: window.location.href });
+						return;
+					}
+					throw err;
+				}
+				sessionStorage.removeItem(REAUTH_ATTEMPTED_KEY);
 				await goto(resolve('/admin'), {
 					replaceState: true,
 					invalidateAll: true,
@@ -517,10 +559,15 @@
 				});
 				return;
 			}
+
+			sessionStorage.removeItem(REAUTH_ATTEMPTED_KEY);
 		} catch (err) {
-			error = err instanceof Error ? err.message : '管理員驗證失敗';
+			sessionStorage.removeItem(REAUTH_ATTEMPTED_KEY);
+			if (data.authState === 'needs-session') {
+				error = err instanceof Error ? err.message : '管理員驗證失敗';
+			}
 		} finally {
-			if (authState === 'needs-session') {
+			if (data.authState === 'needs-session') {
 				loading = false;
 				syncingSession = false;
 			}
@@ -536,6 +583,12 @@
 		authState = data.authState;
 		records = [...data.records];
 		stats = data.stats;
+
+		if (data.authState === 'error') {
+			error = data.errorMessage || '後台資料載入失敗，請稍後再試。';
+		} else if (data.authState === 'authorized' || data.authState === 'forbidden') {
+			error = '';
+		}
 
 		if (authState !== 'needs-session') {
 			loading = false;
@@ -572,7 +625,7 @@
 </script>
 
 <svelte:head>
-	<title>管理後台 — 五十郎 檔案室</title>
+	<title>管理後台 — Jo造型髮藝</title>
 </svelte:head>
 
 <div
@@ -586,9 +639,9 @@
 		<div class="mx-auto flex max-w-6xl items-center justify-between px-5 py-5 md:px-8">
 			<div class="flex items-center gap-3">
 				<div
-					class="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#8F9E91] text-lg font-semibold text-white shadow-[0_12px_30px_rgba(143,158,145,0.22)]"
+					class="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#8F9E91] text-base font-semibold text-white shadow-[0_12px_30px_rgba(143,158,145,0.22)]"
 				>
-					五
+					Jo
 				</div>
 				<div>
 					<p class="flex items-center gap-2 text-[11px] tracking-[0.28em] text-[#8E857D] uppercase">
@@ -600,7 +653,7 @@
 						class="font-serif text-xl font-semibold tracking-[0.04em]"
 						style="font-family: 'Playfair Display', serif;"
 					>
-						五十郎 檔案室
+						Jo造型髮藝 預約管理
 					</h1>
 				</div>
 			</div>
@@ -651,6 +704,35 @@
 				{#if syncingSession}
 					<p class="mt-4 text-xs tracking-[0.2em] text-[#9b9086]">SYNCING SESSION</p>
 				{/if}
+			</div>
+		{:else if authState === 'error' || (authState === 'needs-session' && error && !loading)}
+			<div
+				class="rounded-[32px] border border-[#ecd6d2] bg-white/80 px-6 py-14 shadow-[0_24px_60px_rgba(74,69,64,0.08)] backdrop-blur-xl"
+				in:scale={{ duration: 250 }}
+			>
+				<div class="mx-auto flex max-w-lg flex-col items-center text-center">
+					<h2 class="text-2xl font-semibold text-[#4c4640]">後台暫時無法登入</h2>
+					<p class="mt-3 text-sm leading-7 text-[#786f68]">{error}</p>
+					<div class="mt-6 flex flex-wrap justify-center gap-3">
+						{#if authState === 'needs-session'}
+							<button
+								type="button"
+								onclick={retryLineLogin}
+								class="rounded-xl bg-[#8F9E91] px-5 py-2.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-[#7A8A7C]"
+							>
+								重新登入 LINE
+							</button>
+						{:else}
+							<button
+								type="button"
+								onclick={() => window.location.reload()}
+								class="rounded-xl bg-[#8F9E91] px-5 py-2.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-[#7A8A7C]"
+							>
+								重新載入
+							</button>
+						{/if}
+					</div>
+				</div>
 			</div>
 		{:else if authState === 'forbidden'}
 			<div
@@ -910,10 +992,7 @@
 						<div>
 							<span class="text-sm font-medium text-[#5c554f]">選擇日期（可複選）</span>
 							<div class="mt-1">
-								<MultiDatePicker
-									bind:selectedDates={closureDates}
-									min={new Date().toISOString().split('T')[0]}
-								/>
+								<MultiDatePicker bind:selectedDates={closureDates} min={todayStr} />
 							</div>
 						</div>
 
