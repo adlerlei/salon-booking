@@ -1,7 +1,7 @@
 import { json } from '@sveltejs/kit';
 import { eq } from 'drizzle-orm';
-import { getAdminRecord } from '$lib/server/admin';
-import { initDb } from '$lib/server/db';
+import { requireAdmin } from '$lib/server/admin';
+import { getDbErrorMessage, initDb, isD1QuotaExceededError } from '$lib/server/db';
 import { announcements, articles } from '$lib/server/db/schema';
 import { listAdminAnnouncements, listAdminArticles } from '$lib/server/news';
 
@@ -20,120 +20,52 @@ const buildArticleSlug = (title: string) => {
 	return normalized ? `${normalized}-${suffix}` : `post-${suffix}`;
 };
 
-const requireAdmin = async (
-	locals: App.Locals,
-	platform: Readonly<App.Platform> | undefined
-): Promise<{ lineUserId: string } | { error: Response }> => {
-	if (!locals.lineUserId) {
-		return { error: json({ success: false, message: '請先完成 LINE 驗證' }, { status: 401 }) };
-	}
-
-	const adminRecord = await getAdminRecord(platform, locals.lineUserId);
-	if (!adminRecord) {
-		return { error: json({ success: false, message: '沒有管理員權限' }, { status: 403 }) };
-	}
-
-	return { lineUserId: locals.lineUserId };
-};
-
 const listContent = async (platform: Readonly<App.Platform> | undefined) => ({
 	announcements: await listAdminAnnouncements(platform),
 	articles: await listAdminArticles(platform)
 });
 
-export async function GET({ locals, platform }) {
-	const auth = await requireAdmin(locals, platform);
-	if ('error' in auth) return auth.error;
-
+const handleContentError = (err: unknown, fallback: string) => {
+	console.error(fallback, err);
 	return json(
-		{ success: true, ...(await listContent(platform)) },
-		{
-			headers: { 'Cache-Control': 'no-store' }
-		}
+		{ success: false, message: getDbErrorMessage(err, fallback) },
+		{ status: isD1QuotaExceededError(err) ? 503 : 500 }
 	);
+};
+
+export async function GET({ locals, platform }) {
+	try {
+		const auth = await requireAdmin(locals, platform);
+		if ('error' in auth) return auth.error;
+
+		return json(
+			{ success: true, ...(await listContent(platform)) },
+			{
+				headers: { 'Cache-Control': 'no-store' }
+			}
+		);
+	} catch (err) {
+		return handleContentError(err, '消息資料載入失敗');
+	}
 }
 
 export async function POST({ request, locals, platform }) {
-	const auth = await requireAdmin(locals, platform);
-	if ('error' in auth) return auth.error;
+	try {
+		const auth = await requireAdmin(locals, platform);
+		if ('error' in auth) return auth.error;
 
-	const body = (await request.json()) as ContentBody;
-	const db = initDb(platform);
-	const now = new Date();
+		const body = (await request.json()) as ContentBody;
+		const db = initDb(platform);
+		const now = new Date();
 
-	if (body.type === 'announcement') {
-		const title = String(body.title || '公告').trim();
-		const content = String(body.content || '').trim();
-		if (!content) {
-			return json({ success: false, message: '公告內容必填' }, { status: 400 });
-		}
+		if (body.type === 'announcement') {
+			const title = String(body.title || '公告').trim();
+			const content = String(body.content || '').trim();
+			if (!content) {
+				return json({ success: false, message: '公告內容必填' }, { status: 400 });
+			}
 
-		await db.insert(announcements).values({
-			title,
-			content,
-			status: 'published',
-			startsAt: null,
-			endsAt: null,
-			isPinned: false,
-			showOnBooking: true,
-			createdBy: auth.lineUserId,
-			createdAt: now,
-			updatedAt: now
-		});
-
-		return json({ success: true, ...(await listContent(platform)) });
-	}
-
-	if (body.type === 'article') {
-		const title = String(body.title || '').trim();
-		const slug = buildArticleSlug(title);
-		const excerpt = String(body.excerpt || '').trim();
-		const content = String(body.content || '').trim();
-
-		if (!title || !slug || !excerpt || !content) {
-			return json({ success: false, message: '文章標題、摘要與內容必填' }, { status: 400 });
-		}
-
-		await db.insert(articles).values({
-			title,
-			slug,
-			excerpt,
-			content,
-			coverImageUrl: null,
-			status: 'published',
-			publishedAt: now.toISOString(),
-			createdBy: auth.lineUserId,
-			createdAt: now,
-			updatedAt: now
-		});
-
-		return json({ success: true, ...(await listContent(platform)) });
-	}
-
-	return json({ success: false, message: '不支援的內容類型' }, { status: 400 });
-}
-
-export async function PATCH({ request, locals, platform }) {
-	const auth = await requireAdmin(locals, platform);
-	if ('error' in auth) return auth.error;
-
-	const body = (await request.json()) as ContentBody;
-	const id = String(body.id || '');
-	if (!id) return json({ success: false, message: '缺少內容 ID' }, { status: 400 });
-
-	const db = initDb(platform);
-	const now = new Date();
-
-	if (body.type === 'announcement') {
-		const title = String(body.title || '公告').trim();
-		const content = String(body.content || '').trim();
-		if (!content) {
-			return json({ success: false, message: '公告內容必填' }, { status: 400 });
-		}
-
-		await db
-			.update(announcements)
-			.set({
+			await db.insert(announcements).values({
 				title,
 				content,
 				status: 'published',
@@ -141,63 +73,139 @@ export async function PATCH({ request, locals, platform }) {
 				endsAt: null,
 				isPinned: false,
 				showOnBooking: true,
+				createdBy: auth.lineUserId,
+				createdAt: now,
 				updatedAt: now
-			})
-			.where(eq(announcements.id, id));
+			});
 
-		return json({ success: true, ...(await listContent(platform)) });
-	}
-
-	if (body.type === 'article') {
-		const title = String(body.title || '').trim();
-		const excerpt = String(body.excerpt || '').trim();
-		const content = String(body.content || '').trim();
-		if (!title || !excerpt || !content) {
-			return json({ success: false, message: '文章標題、摘要與內容必填' }, { status: 400 });
+			return json({ success: true, ...(await listContent(platform)) });
 		}
 
-		const [existing] = await db
-			.select({ slug: articles.slug })
-			.from(articles)
-			.where(eq(articles.id, id));
-		const slug = existing?.slug || buildArticleSlug(title);
+		if (body.type === 'article') {
+			const title = String(body.title || '').trim();
+			const slug = buildArticleSlug(title);
+			const excerpt = String(body.excerpt || '').trim();
+			const content = String(body.content || '').trim();
 
-		await db
-			.update(articles)
-			.set({
+			if (!title || !slug || !excerpt || !content) {
+				return json({ success: false, message: '文章標題、摘要與內容必填' }, { status: 400 });
+			}
+
+			await db.insert(articles).values({
 				title,
 				slug,
 				excerpt,
 				content,
 				coverImageUrl: null,
 				status: 'published',
-				publishedAt: stringOrNull(body.publishedAt) || now.toISOString(),
+				publishedAt: now.toISOString(),
+				createdBy: auth.lineUserId,
+				createdAt: now,
 				updatedAt: now
-			})
-			.where(eq(articles.id, id));
+			});
 
-		return json({ success: true, ...(await listContent(platform)) });
+			return json({ success: true, ...(await listContent(platform)) });
+		}
+
+		return json({ success: false, message: '不支援的內容類型' }, { status: 400 });
+	} catch (err) {
+		return handleContentError(err, '內容發布失敗');
 	}
+}
 
-	return json({ success: false, message: '不支援的內容類型' }, { status: 400 });
+export async function PATCH({ request, locals, platform }) {
+	try {
+		const auth = await requireAdmin(locals, platform);
+		if ('error' in auth) return auth.error;
+
+		const body = (await request.json()) as ContentBody;
+		const id = String(body.id || '');
+		if (!id) return json({ success: false, message: '缺少內容 ID' }, { status: 400 });
+
+		const db = initDb(platform);
+		const now = new Date();
+
+		if (body.type === 'announcement') {
+			const title = String(body.title || '公告').trim();
+			const content = String(body.content || '').trim();
+			if (!content) {
+				return json({ success: false, message: '公告內容必填' }, { status: 400 });
+			}
+
+			await db
+				.update(announcements)
+				.set({
+					title,
+					content,
+					status: 'published',
+					startsAt: null,
+					endsAt: null,
+					isPinned: false,
+					showOnBooking: true,
+					updatedAt: now
+				})
+				.where(eq(announcements.id, id));
+
+			return json({ success: true, ...(await listContent(platform)) });
+		}
+
+		if (body.type === 'article') {
+			const title = String(body.title || '').trim();
+			const excerpt = String(body.excerpt || '').trim();
+			const content = String(body.content || '').trim();
+			if (!title || !excerpt || !content) {
+				return json({ success: false, message: '文章標題、摘要與內容必填' }, { status: 400 });
+			}
+
+			const [existing] = await db
+				.select({ slug: articles.slug })
+				.from(articles)
+				.where(eq(articles.id, id));
+			const slug = existing?.slug || buildArticleSlug(title);
+
+			await db
+				.update(articles)
+				.set({
+					title,
+					slug,
+					excerpt,
+					content,
+					coverImageUrl: null,
+					status: 'published',
+					publishedAt: stringOrNull(body.publishedAt) || now.toISOString(),
+					updatedAt: now
+				})
+				.where(eq(articles.id, id));
+
+			return json({ success: true, ...(await listContent(platform)) });
+		}
+
+		return json({ success: false, message: '不支援的內容類型' }, { status: 400 });
+	} catch (err) {
+		return handleContentError(err, '內容更新失敗');
+	}
 }
 
 export async function DELETE({ request, locals, platform }) {
-	const auth = await requireAdmin(locals, platform);
-	if ('error' in auth) return auth.error;
+	try {
+		const auth = await requireAdmin(locals, platform);
+		if ('error' in auth) return auth.error;
 
-	const body = (await request.json()) as ContentBody;
-	const id = String(body.id || '');
-	if (!id) return json({ success: false, message: '缺少內容 ID' }, { status: 400 });
+		const body = (await request.json()) as ContentBody;
+		const id = String(body.id || '');
+		if (!id) return json({ success: false, message: '缺少內容 ID' }, { status: 400 });
 
-	const db = initDb(platform);
-	if (body.type === 'announcement') {
-		await db.delete(announcements).where(eq(announcements.id, id));
-	} else if (body.type === 'article') {
-		await db.delete(articles).where(eq(articles.id, id));
-	} else {
-		return json({ success: false, message: '不支援的內容類型' }, { status: 400 });
+		const db = initDb(platform);
+		if (body.type === 'announcement') {
+			await db.delete(announcements).where(eq(announcements.id, id));
+		} else if (body.type === 'article') {
+			await db.delete(articles).where(eq(articles.id, id));
+		} else {
+			return json({ success: false, message: '不支援的內容類型' }, { status: 400 });
+		}
+
+		return json({ success: true, ...(await listContent(platform)) });
+	} catch (err) {
+		return handleContentError(err, '內容刪除失敗');
 	}
-
-	return json({ success: true, ...(await listContent(platform)) });
 }

@@ -89,7 +89,7 @@ export const readUserSession = async (sessionValue: string | undefined, env: Env
 
 	const userId = sessionValue.slice(0, separatorIndex);
 	const signature = sessionValue.slice(separatorIndex + 1);
-	const secret = env?.LINE_SESSION_SECRET;
+	const secret = env?.LINE_SESSION_SECRET || process.env.LINE_SESSION_SECRET;
 
 	if (!userId || !signature || !secret) return null;
 

@@ -1,21 +1,23 @@
 import { json } from '@sveltejs/kit';
-import {
-	buildAdminDashboardStats,
-	getAdminRecord,
-	listAdminBookings
-} from '$lib/server/admin';
+import { buildAdminDashboardStats, listAdminBookings, requireAdmin } from '$lib/server/admin';
+import { getDbErrorMessage, isD1QuotaExceededError } from '$lib/server/db';
 
 export async function GET({ locals, platform }) {
-	if (!locals.lineUserId) {
-		return json({ success: false, message: '請先完成 LINE 驗證' }, { status: 401 });
+	try {
+		const auth = await requireAdmin(locals, platform);
+		if ('error' in auth) return auth.error;
+
+		const records = await listAdminBookings(platform);
+		return json({ success: true, records, stats: buildAdminDashboardStats(records) });
+	} catch (err) {
+		console.error('Failed to fetch admin bookings:', err);
+		return json(
+			{
+				success: false,
+				message: getDbErrorMessage(err, '後台資料更新失敗'),
+				records: []
+			},
+			{ status: isD1QuotaExceededError(err) ? 503 : 500 }
+		);
 	}
-
-	const adminRecord = await getAdminRecord(platform, locals.lineUserId);
-
-	if (!adminRecord) {
-		return json({ success: false, message: '沒有管理員權限', records: [] }, { status: 403 });
-	}
-
-	const records = await listAdminBookings(platform);
-	return json({ success: true, records, stats: buildAdminDashboardStats(records) });
 }

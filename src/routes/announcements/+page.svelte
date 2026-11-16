@@ -11,8 +11,8 @@
 </script>
 
 <svelte:head>
-	<title>公告 — 五十郎</title>
-	<meta name="description" content="五十郎最新公告。" />
+	<title>公告 — Jo造型髮藝</title>
+	<meta name="description" content="Jo造型髮藝最新公告。" />
 </svelte:head>
 
 <div class="min-h-screen bg-[#F9F8F6] pb-16 text-[#2C302E]">

@@ -15,14 +15,14 @@
 </script>
 
 <svelte:head>
-	<title>{data.article.title} — 五十專欄</title>
+	<title>{data.article.title} — 髮藝專欄</title>
 	<meta name="description" content={data.article.excerpt} />
 </svelte:head>
 
 <div class="min-h-screen bg-[#F9F8F6] pb-16 text-[#2C302E]">
 	<header class="border-b border-[#eee7df] bg-white/90 px-5 py-4 backdrop-blur">
 		<div class="mx-auto max-w-3xl">
-			<a href={resolve('/column')} class="text-sm text-[#61705f] underline">返回五十專欄</a>
+			<a href={resolve('/column')} class="text-sm text-[#61705f] underline">返回髮藝專欄</a>
 		</div>
 	</header>
 

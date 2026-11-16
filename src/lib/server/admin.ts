@@ -1,6 +1,8 @@
-import { eq } from 'drizzle-orm';
+import { json } from '@sveltejs/kit';
+import { eq, gte } from 'drizzle-orm';
 import { initDb } from '$lib/server/db';
 import { admins, appointments } from '$lib/server/db/schema';
+import { getTaipeiNowParts } from '$lib/server/time';
 
 type AdminBookingRecord = typeof appointments.$inferSelect;
 export type AdminRecord = typeof admins.$inferSelect;
@@ -55,17 +57,31 @@ const startOfMonth = (date: Date) => new Date(date.getFullYear(), date.getMonth(
 const endOfMonth = (date: Date) =>
 	new Date(date.getFullYear(), date.getMonth() + 1, 0, 23, 59, 59, 999);
 
+const toTaipeiWallDate = (now = new Date()) => {
+	const parts = getTaipeiNowParts(now);
+	return new Date(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute);
+};
+
+const formatDateKey = (date: Date) =>
+	`${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+
 const formatServiceStats = (records: AdminBookingRecord[]): ServiceStat[] => {
 	const counts = new Map<string, number>();
 
 	for (const record of records) {
 		if (record.servicesJson) {
 			try {
-				const items = JSON.parse(record.servicesJson) as { service: string }[];
-				for (const item of items) {
-					counts.set(item.service, (counts.get(item.service) || 0) + 1);
+				const items = JSON.parse(record.servicesJson) as { service?: unknown }[];
+				if (Array.isArray(items) && items.length > 0) {
+					for (const item of items) {
+						const name =
+							typeof item?.service === 'string' && item.service.trim()
+								? item.service
+								: record.serviceType;
+						counts.set(name, (counts.get(name) || 0) + 1);
+					}
+					continue;
 				}
-				continue;
 			} catch {
 				// fallthrough to serviceType
 			}
@@ -112,21 +128,51 @@ export const getAdminRecord = async (
 	return adminRecord ?? null;
 };
 
+export const requireAdmin = async (
+	locals: App.Locals,
+	platform: Readonly<App.Platform> | undefined
+): Promise<{ lineUserId: string; adminRecord: AdminRecord } | { error: Response }> => {
+	if (!locals.lineUserId) {
+		return { error: json({ success: false, message: '請先完成 LINE 驗證' }, { status: 401 }) };
+	}
+
+	const adminRecord = await getAdminRecord(platform, locals.lineUserId);
+	if (!adminRecord) {
+		return { error: json({ success: false, message: '沒有管理員權限' }, { status: 403 }) };
+	}
+
+	return { lineUserId: locals.lineUserId, adminRecord };
+};
+
 export const listAdminRecords = async (platform: Readonly<App.Platform> | undefined) => {
 	const db = initDb(platform);
 	return db.select().from(admins) as Promise<AdminRecord[]>;
 };
 
-export const listAdminBookings = async (platform: Readonly<App.Platform> | undefined) => {
+export const listAdminBookings = async (
+	platform: Readonly<App.Platform> | undefined,
+	now = new Date()
+) => {
 	const db = initDb(platform);
-	return db.select().from(appointments);
+	const taipeiNow = toTaipeiWallDate(now);
+	const weekStart = startOfWeek(taipeiNow);
+	const monthStart = startOfMonth(taipeiNow);
+	const earliest = weekStart < monthStart ? weekStart : monthStart;
+
+	return db
+		.select()
+		.from(appointments)
+		.where(gte(appointments.appointmentDate, formatDateKey(earliest)));
 };
 
 export const buildAdminDashboardStats = (
 	records: AdminBookingRecord[],
 	now = new Date()
-): AdminDashboardStats => ({
-	day: buildPeriodStats('今日', records, startOfDay(now), endOfDay(now)),
-	week: buildPeriodStats('本週', records, startOfWeek(now), endOfWeek(now)),
-	month: buildPeriodStats('本月', records, startOfMonth(now), endOfMonth(now))
-});
+): AdminDashboardStats => {
+	const taipeiNow = toTaipeiWallDate(now);
+	return {
+		day: buildPeriodStats('今日', records, startOfDay(taipeiNow), endOfDay(taipeiNow)),
+		week: buildPeriodStats('本週', records, startOfWeek(taipeiNow), endOfWeek(taipeiNow)),
+		month: buildPeriodStats('本月', records, startOfMonth(taipeiNow), endOfMonth(taipeiNow))
+	};
+};
