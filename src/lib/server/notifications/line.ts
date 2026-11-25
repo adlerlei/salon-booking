@@ -5,7 +5,7 @@ import { initDb } from '$lib/server/db';
 import { notificationStates } from '$lib/server/db/schema';
 
 const NOTIFICATION_KEY = 'admin-booking-line';
-const DEFAULT_ADMIN_DASHBOARD_URL = 'https://salon-booking-a01.pages.dev/admin';
+const DEFAULT_ADMIN_DASHBOARD_URL = 'https://liff.line.me/2009342816-q0rukZhq/admin';
 
 type QuotaResponse = {
 	type: 'none' | 'limited';

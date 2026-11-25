@@ -48,7 +48,7 @@
 		"wrangler": "^4.63.0"
 	},
 	"dependencies": {
-		"@line/liff": "^2.27.3",
+		"@line/liff": "^2.32.0",
 		"better-sqlite3": "^12.6.2"
 	}
 }
