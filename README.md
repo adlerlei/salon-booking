@@ -229,6 +229,19 @@ npm run deploy:prod
     - **手機主畫面推播（Web Push / PWA 推播）**：後台加入手機主畫面並允許通知即可即時接收推播（支援 Android 與 iOS 16.4+），免裝額外軟體
     - **Telegram 機器人推播**：免費無上限、推播即時穩定，支援群組同步通知店家／設計師
   - 通知內容標註預約來源（LINE / Google / 網頁訪客）並顯示手機號碼（若有填寫）
+- **第一階段（同步規劃）：品牌官方網站與 SEO／AI 搜尋優化（GEO）**
+  - **定位與用途**：作為展示於 Google 商家檔案與一般顧客瀏覽的品牌官網，與線上預約系統整合於同一網站（規劃路由時需確保既有官方 LINE 圖文選單入口不中斷）
+  - **官網核心頁面結構**（整合既有內容）：
+    - 品牌首頁：沙龍特色、風格介紹、營業時間、交通位置與醒目的「立即線上預約」入口
+    - 服務與價目介紹頁：清楚列出剪／燙／染／護髮與頭皮保養項目、預估時間與特色說明
+    - 常見問答頁（FAQ）：彙整預約方式、逾時 10 分鐘不予保留規定、營業時間與公休、交通資訊等
+    - 整合既有「最新公告 `/announcements`」與「髮藝專欄 `/column`」，持續累積原創在地內容提升自然搜尋與 AI 引用機會
+  - **SEO 與 AI 搜尋推薦最佳化（GEO／AEO）**：
+    - 運用 SvelteKit 伺服器端渲染（SSR），確保所有公開頁面輸出完整語意化 HTML 與獨立的 Title、Meta Description、Canonical URL、Open Graph 分享卡片與圖片替代文字
+    - 加入完整結構化資料（JSON-LD）：`HairSalon`／`LocalBusiness`（店名、地址、電話、營業時間、座標與預約連結）、`Service`、`FAQPage` 與專欄 `Article`
+    - 建立動態 `sitemap.xml`（自動包含官網頁面、公告與專欄文章）、正確的 `robots.txt`（開放公開頁面給搜尋與 AI 檢索爬蟲，排除 `/admin` 與 `/api`）
+    - 提供 `llms.txt` 結構化純文字店家摘要與頁面索引，協助 ChatGPT、Gemini、Perplexity 等 AI 搜尋引擎精準理解與推薦店家
+    - 維持官網與 Google 商家檔案的店名、地址、電話、營業時間（NAP）完全一致並雙向互連，同步顧及手機載入效能與核心網頁指標（Core Web Vitals）
 - **第二階段：簡易式髮廊店家營業管理系統（輕量不複雜）**
   - **核心分離原則**：顧客預約時的服務項目與預估金額，暫時與店家營業管理／結帳系統分開（因顧客現場未必只做原預約項目）；由店家於**現場結帳時**再實際選擇該顧客施作的服務項目與金額
   - 整合於現有管理後台（支援加入手機主畫面直接操作），待細部確認項目包含：
@@ -236,11 +249,12 @@ npm run deploy:prod
     - 簡易營業額統計（今日／本週／本月營收總覽）
     - 顧客簡易備註（染燙配方、習慣偏好，下次預約自動提醒）
     - 服務項目與價目維護
-- **上線前待補外部設定（皆為免費方案）**
-  - Google Cloud OAuth Client ID（Google 登入用）
-  - Cloudflare Turnstile Site Key / Secret Key（訪客防機器人驗證用）
-  - Telegram Bot Token / Chat ID（Telegram 通知用）
-  - Web Push VAPID 金鑰（手機主畫面推播用）
+- **上線前待補外部設定**
+  - Google Cloud OAuth Client ID（免費，Google 登入用）
+  - Cloudflare Turnstile Site Key / Secret Key（免費，訪客防機器人驗證用）
+  - Telegram Bot Token / Chat ID（免費，Telegram 通知用）
+  - Web Push VAPID 金鑰（免費，手機主畫面推播用）
+  - 建議綁定專屬自訂網域（選配，非免費但年費低，顯著提升品牌信任感、Google 商家呈現與 SEO／AI 搜尋收錄效果；亦可先沿用現有網址）
 - **商店購物頁面**
   - 提供商品展示與購買功能
 - **管理後台店家視圖再簡化**
