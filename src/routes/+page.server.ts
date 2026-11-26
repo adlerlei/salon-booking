@@ -2,20 +2,32 @@ import { getDbErrorMessage, initDb } from '$lib/server/db';
 import { appointments, closures } from '$lib/server/db/schema';
 import { and, eq, gte, lt } from 'drizzle-orm';
 import { verifyLineAccessToken } from '$lib/server/auth/line';
+import { isGoogleAuthConfigured, verifyGoogleIdToken } from '$lib/server/auth/google';
+import {
+	createAuthSession,
+	sessionCookieOptions,
+	userSessionCookieName
+} from '$lib/server/auth/session';
+import {
+	createGuestSubject,
+	isValidTaiwanMobile,
+	normalizeTaiwanMobile
+} from '$lib/server/auth/guest';
+import type { AuthIdentity, AuthProvider } from '$lib/server/auth/types';
+import { countFutureConfirmedByPhone } from '$lib/server/bookings';
 import { notifyAdminsAboutNewBooking } from '$lib/server/notifications/line';
 import { listActiveAnnouncements } from '$lib/server/news';
 import { toTaipeiNowString } from '$lib/server/time';
 
-// 服務對應的時間（分鐘）
 const serviceDurations: Record<string, number> = {
 	男生單剪: 20,
 	女生單剪: 30,
 	男生洗剪: 30,
 	女生洗剪: 50,
 	男生染髮: 90,
-	女生染髮: 120, // 取 2 小時
+	女生染髮: 120,
 	男生燙髮: 90,
-	女生燙髮: 180, // 取 3 小時
+	女生燙髮: 180,
 	'洗髮+頭皮保養': 40,
 	'洗剪+頭皮保養': 60,
 	'護髮+洗髮': 30,
@@ -31,7 +43,13 @@ const timeToMinutes = (timeStr: string) => {
 	return hours * 60 + minutes;
 };
 
-export const load = async ({ platform }) => {
+export const load = async ({ platform, locals }) => {
+	const googleClientId =
+		platform?.env?.GOOGLE_CLIENT_ID ||
+		process.env.GOOGLE_CLIENT_ID ||
+		process.env.PUBLIC_GOOGLE_CLIENT_ID ||
+		'';
+
 	try {
 		const db = initDb(platform);
 		const today = toTaipeiNowString().split('T')[0];
@@ -60,7 +78,10 @@ export const load = async ({ platform }) => {
 			appointments: allAppointments,
 			closures: allClosures,
 			announcements: bookingAnnouncements,
-			loadError: ''
+			loadError: '',
+			auth: locals.auth,
+			googleEnabled: isGoogleAuthConfigured(platform?.env),
+			googleClientId
 		};
 	} catch (err) {
 		console.error('Failed to load booking page data:', err);
@@ -68,29 +89,101 @@ export const load = async ({ platform }) => {
 			appointments: [],
 			closures: [],
 			announcements: [],
-			loadError: getDbErrorMessage(err, '系統資料載入失敗，請稍後再試。')
+			loadError: getDbErrorMessage(err, '系統資料載入失敗，請稍後再試。'),
+			auth: locals.auth,
+			googleEnabled: isGoogleAuthConfigured(platform?.env),
+			googleClientId
 		};
 	}
 };
 
 type ServiceItem = { service: string; duration: number };
 
+const resolveIdentityFromForm = async ({
+	data,
+	existingAuth,
+	platform,
+	cookies,
+	url
+}: {
+	data: FormData;
+	existingAuth: AuthIdentity | null;
+	platform: App.Platform | undefined;
+	cookies: import('@sveltejs/kit').Cookies;
+	url: URL;
+}): Promise<{ identity: AuthIdentity } | { error: string }> => {
+	const authProvider = (data.get('authProvider') as AuthProvider | '') || '';
+	const accessToken = (data.get('accessToken') as string) || '';
+	const googleIdToken = (data.get('googleIdToken') as string) || '';
+	const guestPhoneRaw = (data.get('guestPhone') as string) || '';
+	const guestName = ((data.get('guestName') as string) || '').trim();
+
+	let identity: AuthIdentity | null = null;
+
+	if (authProvider === 'line' || (!authProvider && accessToken)) {
+		if (!accessToken) return { error: '缺少 LINE 驗證資訊' };
+		const profile = await verifyLineAccessToken(accessToken);
+		identity = { provider: 'line', subject: profile.sub, name: profile.name || null };
+	} else if (authProvider === 'google' || (!authProvider && googleIdToken)) {
+		if (!googleIdToken) return { error: '缺少 Google 登入資訊' };
+		const profile = await verifyGoogleIdToken(googleIdToken, platform?.env);
+		identity = {
+			provider: 'google',
+			subject: profile.sub,
+			name: profile.name || null,
+			email: profile.email || null
+		};
+	} else if (authProvider === 'guest' || (!authProvider && guestPhoneRaw)) {
+		const phone = normalizeTaiwanMobile(guestPhoneRaw || existingAuth?.phone || '');
+		if (!isValidTaiwanMobile(phone)) {
+			return { error: '請輸入有效的台灣手機號碼（09 開頭共 10 碼）' };
+		}
+		identity = {
+			provider: 'guest',
+			subject: existingAuth?.provider === 'guest' ? existingAuth.subject : createGuestSubject(),
+			name: guestName || existingAuth?.name || null,
+			phone
+		};
+	} else if (existingAuth) {
+		identity = existingAuth;
+	}
+
+	if (!identity) {
+		return { error: '請先以 LINE、Google 登入，或填寫手機號碼後再預約' };
+	}
+
+	cookies.set(
+		userSessionCookieName,
+		await createAuthSession(identity, platform?.env),
+		sessionCookieOptions(url)
+	);
+
+	return { identity };
+};
+
 export const actions = {
-	default: async ({ request, platform }) => {
+	default: async ({ request, platform, cookies, url, locals }) => {
 		try {
 			const data = await request.formData();
-			const accessToken = data.get('accessToken') as string;
 			const appointmentDate = data.get('appointmentDate') as string;
 			const servicesJsonStr = data.get('servicesJson') as string;
 			const partySize = parseInt((data.get('partySize') as string) || '1') || 1;
 
-			if (!accessToken) {
-				return { success: false, message: '缺少 LINE 驗證資訊' };
-			}
-
 			if (!appointmentDate) {
 				return { success: false, message: '預約資料不完整' };
 			}
+
+			const resolved = await resolveIdentityFromForm({
+				data,
+				existingAuth: locals.auth,
+				platform,
+				cookies,
+				url
+			});
+			if ('error' in resolved) {
+				return { success: false, message: resolved.error };
+			}
+			const { identity } = resolved;
 
 			let serviceItems: ServiceItem[] = [];
 
@@ -101,7 +194,6 @@ export const actions = {
 					return { success: false, message: '預約資料格式錯誤' };
 				}
 			} else {
-				// 舊版相容：單服務
 				const serviceType = data.get('serviceType') as string;
 				if (!serviceType) return { success: false, message: '預約資料不完整' };
 				serviceItems = [{ service: serviceType, duration: serviceDurations[serviceType] || 60 }];
@@ -111,7 +203,6 @@ export const actions = {
 				return { success: false, message: '請至少選擇一項服務' };
 			}
 
-			// 驗證所有服務都合法
 			for (const item of serviceItems) {
 				if (!(item.service in serviceDurations)) {
 					return { success: false, message: `不支援的服務項目：${item.service}` };
@@ -126,12 +217,21 @@ export const actions = {
 				return { success: false, message: '預約日期時間格式錯誤' };
 			}
 
-			const profile = await verifyLineAccessToken(accessToken);
 			const db = initDb(platform);
 			const nowInTaipei = toTaipeiNowString();
 
 			if (appointmentDate < nowInTaipei) {
 				return { success: false, message: '不能預約已經過去的時段' };
+			}
+
+			if (identity.provider === 'guest' && identity.phone) {
+				const existingCount = await countFutureConfirmedByPhone(db, identity.phone);
+				if (existingCount > 0) {
+					return {
+						success: false,
+						message: '此手機號碼已有即將到來的預約，如需更改請先取消原預約'
+					};
+				}
 			}
 
 			const [selectedDate, selectedTime] = appointmentDate.split('T');
@@ -201,21 +301,31 @@ export const actions = {
 				return { success: false, message: '這個時段已經被預約，請重新選擇' };
 			}
 
+			const customerName =
+				identity.name ||
+				(identity.provider === 'guest'
+					? '訪客'
+					: identity.provider === 'google'
+						? 'Google 用戶'
+						: 'LINE 使用者');
+
 			await db.insert(appointments).values({
-				lineUserId: profile.sub,
-				customerName: profile.name || 'LINE 使用者',
+				lineUserId: identity.provider === 'line' ? identity.subject : null,
+				customerName,
 				serviceType,
 				durationMinutes,
 				partySize,
 				servicesJson,
 				appointmentDate,
+				authProvider: identity.provider,
+				authSubject: identity.subject,
+				phone: identity.phone || null,
+				email: identity.email || null,
+				source: identity.provider,
 				createdAt: new Date()
 			});
 
-			const notifyName =
-				partySize > 1
-					? `${profile.name || 'LINE 使用者'}（${partySize}人）`
-					: profile.name || 'LINE 使用者';
+			const notifyName = partySize > 1 ? `${customerName}（${partySize}人）` : customerName;
 
 			const notificationTask = notifyAdminsAboutNewBooking(platform, {
 				customerName: notifyName,
@@ -236,14 +346,15 @@ export const actions = {
 				success: true,
 				service: serviceType,
 				date: appointmentDate,
-				name: profile.name || 'LINE 使用者',
+				name: customerName,
 				duration: String(durationMinutes),
 				partySize: String(partySize)
 			};
-		} catch {
+		} catch (err) {
+			console.error('Booking failed:', err);
 			return {
 				success: false,
-				message: '預約失敗，請重新登入 LINE 後再試一次'
+				message: '預約失敗，請確認登入狀態後再試一次'
 			};
 		}
 	}

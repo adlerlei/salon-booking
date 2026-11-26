@@ -1,6 +1,7 @@
 import { json } from '@sveltejs/kit';
 import {
-	createUserSession,
+	createAuthSession,
+	sessionCookieOptions,
 	userSessionCookieName,
 	verifyLineAccessToken
 } from '$lib/server/auth/line';
@@ -14,18 +15,20 @@ export async function POST({ request, cookies, platform, url }) {
 		}
 
 		const profile = await verifyLineAccessToken(accessToken);
-		const sessionValue = await createUserSession(profile.sub, platform?.env);
+		const sessionValue = await createAuthSession(
+			{
+				provider: 'line',
+				subject: profile.sub,
+				name: profile.name || null
+			},
+			platform?.env
+		);
 
-		cookies.set(userSessionCookieName, sessionValue, {
-			path: '/',
-			httpOnly: true,
-			sameSite: 'lax',
-			secure: url.protocol === 'https:',
-			maxAge: 60 * 60 * 24 * 7
-		});
+		cookies.set(userSessionCookieName, sessionValue, sessionCookieOptions(url));
 
 		return json({
 			success: true,
+			provider: 'line',
 			userId: profile.sub,
 			name: profile.name || ''
 		});

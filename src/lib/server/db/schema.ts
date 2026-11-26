@@ -4,7 +4,7 @@ export const appointments = sqliteTable('appointments', {
 	id: text('id')
 		.primaryKey()
 		.$defaultFn(() => crypto.randomUUID()),
-	lineUserId: text('line_user_id').notNull(),
+	lineUserId: text('line_user_id'), // LINE 預約填入；Google／訪客可為 null
 	customerName: text('customer_name').notNull(),
 	serviceType: text('service_type').notNull(), // 例如：剪髮、染髮
 	durationMinutes: integer('duration_minutes').notNull(), // The length of the service in minutes (e.g. 30, 60, 180)
@@ -14,6 +14,15 @@ export const appointments = sqliteTable('appointments', {
 		.default('confirmed'),
 	partySize: integer('party_size').notNull().default(1),
 	servicesJson: text('services_json'), // JSON array: [{service, duration}, ...] for multi-person bookings
+	authProvider: text('auth_provider', { enum: ['line', 'google', 'guest'] })
+		.notNull()
+		.default('line'),
+	authSubject: text('auth_subject').notNull().default(''),
+	phone: text('phone'),
+	email: text('email'),
+	source: text('source', { enum: ['line', 'google', 'guest'] })
+		.notNull()
+		.default('line'),
 	createdAt: integer('created_at', { mode: 'timestamp' }).$defaultFn(() => new Date())
 });
 

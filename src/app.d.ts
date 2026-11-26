@@ -6,6 +6,8 @@ declare global {
 		LINE_CHANNEL_ACCESS_TOKEN?: string;
 		LINE_NOTIFICATION_MONTHLY_LIMIT?: string;
 		LINE_NOTIFICATION_ADMIN_URL?: string;
+		GOOGLE_CLIENT_ID?: string;
+		TURNSTILE_SECRET_KEY?: string;
 	}
 
 	namespace App {
@@ -18,6 +20,8 @@ declare global {
 
 		// interface Error {}
 		interface Locals {
+			auth: import('$lib/server/auth/types').AuthIdentity | null;
+			/** LINE 管理員白名單用；僅 provider=line 時有值 */
 			lineUserId: string | null;
 		}
 		// interface PageData {}

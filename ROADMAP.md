@@ -67,13 +67,13 @@
 
 ### A. 身份與預約（核心）
 
-- [ ] 獨立開發分支（保護現行線上）
-- [ ] 資料模型：預約支援身份類型（LINE／Google／訪客）、手機、Email、來源；`line_user_id` 可空；舊資料 migration 可讀
-- [ ] Session：支援 LINE／Google／訪客，不再只認 LINE
-- [ ] 預約頁：網頁路徑 Google 登入為主，訪客備援（手機＋名稱）
-- [ ] LINE LIFF 路徑維持自動登入，行為與現況相容
-- [ ] 個人預約查詢／取消：依各自身份；訪客僅同瀏覽器 Session
-- [ ] 訪客防濫用：Turnstile；同一手機已有未來預約則限制再約
+- [x] 獨立開發分支（保護現行線上）`cursor/phase1-multi-identity`
+- [x] 資料模型：預約支援身份類型（LINE／Google／訪客）、手機、Email、來源；`line_user_id` 可空；舊資料 migration 可讀（`0007_multi_identity`）
+- [x] Session：支援 LINE／Google／訪客，不再只認 LINE
+- [x] 預約頁：網頁路徑 Google 登入為主，訪客備援（手機＋名稱）
+- [x] LINE LIFF 路徑維持自動登入，行為與現況相容
+- [x] 個人預約查詢／取消：依各自身份；訪客僅同瀏覽器 Session
+- [ ] 訪客防濫用：Turnstile；同一手機已有未來預約則限制再約（手機重複限制已做；Turnstile 待接）
 - [ ] 伺服器防撞時段＋短時間重複提交拒收
 - [ ] 預約頁／成功頁加上「逾時 10 分鐘不予保留」文案
 

@@ -50,6 +50,13 @@
       "when": 1778918400000,
       "tag": "0006_news_content",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1779900000000,
+      "tag": "0007_multi_identity",
+      "breakpoints": true
     }
   ]
 }

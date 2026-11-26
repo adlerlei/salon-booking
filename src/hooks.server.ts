@@ -1,11 +1,14 @@
 import type { Handle } from '@sveltejs/kit';
-import { readUserSession, userSessionCookieName } from '$lib/server/auth/line';
+import { readAuthSession, userSessionCookieName } from '$lib/server/auth/session';
 
 export const handle: Handle = async ({ event, resolve }) => {
-	event.locals.lineUserId = await readUserSession(
+	const identity = await readAuthSession(
 		event.cookies.get(userSessionCookieName),
 		event.platform?.env
 	);
+
+	event.locals.auth = identity;
+	event.locals.lineUserId = identity?.provider === 'line' ? identity.subject : null;
 
 	const response = await resolve(event);
 

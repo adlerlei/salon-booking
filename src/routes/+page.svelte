@@ -8,11 +8,41 @@
 
 	export let data: PageData;
 
+	type AuthMode = 'loading' | 'line' | 'web';
+	type WebProfile = {
+		provider: 'google' | 'guest' | 'line';
+		displayName: string;
+		pictureUrl?: string;
+		phone?: string;
+		email?: string;
+	};
+
+	let authMode: AuthMode = 'loading';
 	let profile: any = null;
+	let webProfile: WebProfile | null = null;
 	let accessToken = '';
+	let googleIdToken = '';
+	let guestPhone = '';
+	let guestName = '';
+	let guestSubmitting = false;
+	let googleReady = false;
 	let error = '';
 	let isSubmitting = false;
 	let isMarqueePaused = false;
+
+	$: activeDisplayName =
+		profile?.displayName || webProfile?.displayName || data.auth?.name || '';
+	$: authProviderValue = profile
+		? 'line'
+		: webProfile?.provider || data.auth?.provider || '';
+	$: canSubmitBooking = Boolean(
+		(authProviderValue === 'line' && accessToken) ||
+			(authProviderValue === 'google' && (googleIdToken || data.auth?.provider === 'google')) ||
+			(authProviderValue === 'guest' &&
+				(guestPhone || data.auth?.phone || webProfile?.phone)) ||
+			data.auth
+	);
+	$: showBookingForm = Boolean(profile || webProfile || data.auth);
 
 	const handleEnhance = () => {
 		isSubmitting = true;
@@ -34,21 +64,120 @@
 		};
 	};
 
-	onMount(async () => {
-		try {
-			const liffModule = await import('@line/liff');
-			const liff = liffModule.default;
+	const applyServerAuth = () => {
+		if (!data.auth) return;
+		webProfile = {
+			provider: data.auth.provider,
+			displayName:
+				data.auth.name ||
+				(data.auth.provider === 'guest'
+					? '訪客'
+					: data.auth.provider === 'google'
+						? 'Google 用戶'
+						: 'LINE 使用者'),
+			phone: data.auth.phone || undefined,
+			email: data.auth.email || undefined
+		};
+		if (data.auth.phone) guestPhone = data.auth.phone;
+		if (data.auth.name) guestName = data.auth.name;
+	};
 
-			await liff.init({ liffId: '2009342816-q0rukZhq' });
-			if (liff.isLoggedIn()) {
-				profile = await liff.getProfile();
-				accessToken = liff.getAccessToken() || '';
-			} else {
-				liff.login();
+	const loadGoogleButton = async (clientId: string) => {
+		if (!clientId || typeof window === 'undefined') return;
+		await new Promise<void>((resolve, reject) => {
+			if (document.getElementById('google-identity')) {
+				resolve();
+				return;
 			}
-		} catch (err: any) {
-			error = err.message;
+			const script = document.createElement('script');
+			script.id = 'google-identity';
+			script.src = 'https://accounts.google.com/gsi/client';
+			script.async = true;
+			script.onload = () => resolve();
+			script.onerror = () => reject(new Error('Google 登入元件載入失敗'));
+			document.head.appendChild(script);
+		});
+
+		const google = (window as any).google;
+		if (!google?.accounts?.id) return;
+
+		google.accounts.id.initialize({
+			client_id: clientId,
+			callback: async (response: { credential: string }) => {
+				try {
+					error = '';
+					const res = await fetch('/api/auth/google', {
+						method: 'POST',
+						headers: { 'Content-Type': 'application/json' },
+						body: JSON.stringify({ idToken: response.credential })
+					});
+					const json = (await res.json()) as {
+						success: boolean;
+						message?: string;
+						name?: string;
+						email?: string;
+					};
+					if (!res.ok || !json.success) {
+						throw new Error(json.message || 'Google 登入失敗');
+					}
+					googleIdToken = response.credential;
+					webProfile = {
+						provider: 'google',
+						displayName: json.name || 'Google 用戶',
+						email: json.email
+					};
+				} catch (err: any) {
+					error = err.message || 'Google 登入失敗';
+				}
+			}
+		});
+
+		const mount = document.getElementById('google-signin-button');
+		if (mount) {
+			mount.innerHTML = '';
+			google.accounts.id.renderButton(mount, {
+				theme: 'outline',
+				size: 'large',
+				width: 320,
+				text: 'continue_with',
+				shape: 'rectangular'
+			});
+			googleReady = true;
 		}
+	};
+
+	const submitGuestAuth = async () => {
+		guestSubmitting = true;
+		error = '';
+		try {
+			const res = await fetch('/api/auth/guest', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ phone: guestPhone, name: guestName })
+			});
+			const json = (await res.json()) as {
+				success: boolean;
+				message?: string;
+				name?: string;
+				phone?: string;
+			};
+			if (!res.ok || !json.success) {
+				throw new Error(json.message || '訪客驗證失敗');
+			}
+			webProfile = {
+				provider: 'guest',
+				displayName: json.name || '訪客',
+				phone: json.phone
+			};
+		} catch (err: any) {
+			error = err.message || '訪客驗證失敗';
+		} finally {
+			guestSubmitting = false;
+		}
+	};
+
+	onMount(async () => {
+		applyServerAuth();
 
 		try {
 			const res = await fetch('/api/closures');
@@ -57,6 +186,58 @@
 				freshClosures = json.closures;
 			}
 		} catch {}
+
+		try {
+			const liffModule = await import('@line/liff');
+			const liff = liffModule.default;
+			await liff.init({ liffId: '2009342816-q0rukZhq' });
+
+			if (liff.isInClient()) {
+				authMode = 'line';
+				if (liff.isLoggedIn()) {
+					profile = await liff.getProfile();
+					accessToken = liff.getAccessToken() || '';
+					await fetch('/api/auth/session', {
+						method: 'POST',
+						headers: { 'Content-Type': 'application/json' },
+						body: JSON.stringify({ accessToken })
+					});
+				} else {
+					liff.login();
+				}
+				return;
+			}
+
+			authMode = 'web';
+			if (liff.isLoggedIn()) {
+				profile = await liff.getProfile();
+				accessToken = liff.getAccessToken() || '';
+				authMode = 'line';
+				await fetch('/api/auth/session', {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ accessToken })
+				});
+				return;
+			}
+
+			if (!webProfile && data.googleEnabled && data.googleClientId) {
+				await loadGoogleButton(data.googleClientId);
+			}
+		} catch (err: any) {
+			authMode = 'web';
+			if (!webProfile) {
+				// 非 LINE 環境且 LIFF 初始化失敗時，改走網頁身分
+				console.warn('LIFF init skipped for web booking:', err?.message || err);
+			}
+			if (data.googleEnabled && data.googleClientId) {
+				try {
+					await loadGoogleButton(data.googleClientId);
+				} catch (googleErr: any) {
+					error = googleErr.message || error;
+				}
+			}
+		}
 	});
 
 	// Services
@@ -320,16 +501,16 @@
 			Jo造型髮藝 專屬預約
 		</h1>
 
-		{#if profile}
+		{#if activeDisplayName}
 			<div class="flex items-center gap-3">
-				{#if profile.pictureUrl}
+				{#if profile?.pictureUrl}
 					<img
 						src={profile.pictureUrl}
 						alt="Avatar"
 						class="h-8 w-8 rounded-full border border-gray-100"
 					/>
 				{/if}
-				<span class="text-sm font-medium text-gray-600">{profile.displayName}</span>
+				<span class="text-sm font-medium text-gray-600">{activeDisplayName}</span>
 			</div>
 		{/if}
 	</header>
@@ -380,12 +561,86 @@
 				<p class="font-medium">預約系統暫時無法連線</p>
 				<p class="mt-1 text-sm opacity-90">{data.loadError}</p>
 			</div>
-		{:else if error}
+		{:else if error && !showBookingForm}
 			<div class="mb-6 rounded-xl border border-red-100 bg-red-50 p-4 text-red-600">
 				<p class="font-medium">發生錯誤</p>
 				<p class="text-sm opacity-90">{error}</p>
 			</div>
-		{:else if !profile}
+		{:else if authMode === 'loading'}
+			<div class="flex flex-col items-center justify-center py-20 text-gray-500">
+				<div
+					class="mb-4 h-8 w-8 animate-spin rounded-full border-4 border-[#8F9E91] border-t-transparent"
+				></div>
+				<p>載入中...</p>
+			</div>
+		{:else if !showBookingForm && authMode === 'web'}
+			<div class="space-y-6 rounded-2xl border border-[#e6ddd3] bg-white p-6 shadow-sm">
+				<div>
+					<h2 class="text-lg font-semibold text-[#2C302E]">開始預約</h2>
+					<p class="mt-1 text-sm text-[#7f766f]">
+						建議使用 Google 登入，方便之後跨裝置查看與取消預約。也可改填手機號碼繼續。
+					</p>
+				</div>
+
+				{#if error}
+					<div class="rounded-xl border border-red-100 bg-red-50 p-3 text-sm text-red-600">
+						{error}
+					</div>
+				{/if}
+
+				{#if data.googleEnabled}
+					<div class="space-y-2">
+						<p class="text-xs font-medium tracking-wide text-[#61705f]">GOOGLE 登入</p>
+						<div id="google-signin-button" class="flex justify-center"></div>
+						{#if !googleReady}
+							<p class="text-center text-xs text-[#9a918a]">Google 按鈕載入中…</p>
+						{/if}
+					</div>
+					<div class="flex items-center gap-3 text-xs text-[#9a918a]">
+						<div class="h-px flex-1 bg-[#eee7df]"></div>
+						<span>或</span>
+						<div class="h-px flex-1 bg-[#eee7df]"></div>
+					</div>
+				{:else}
+					<p class="rounded-xl bg-[#f9f6f3] p-3 text-sm text-[#5c554f]">
+						Google 登入尚未設定完成，請先使用手機號碼預約。
+					</p>
+				{/if}
+
+				<form
+					class="space-y-3"
+					on:submit|preventDefault={submitGuestAuth}
+				>
+					<p class="text-xs font-medium tracking-wide text-[#61705f]">手機號碼預約</p>
+					<input
+						type="tel"
+						inputmode="numeric"
+						autocomplete="tel"
+						placeholder="手機號碼（09xxxxxxxx）"
+						bind:value={guestPhone}
+						class="w-full rounded-xl border border-[#e6ddd3] px-4 py-3 text-sm"
+						required
+					/>
+					<input
+						type="text"
+						autocomplete="name"
+						placeholder="稱呼（選填）"
+						bind:value={guestName}
+						class="w-full rounded-xl border border-[#e6ddd3] px-4 py-3 text-sm"
+					/>
+					<button
+						type="submit"
+						disabled={guestSubmitting}
+						class="w-full rounded-xl bg-[#2C302E] px-4 py-3 text-sm font-medium text-white disabled:opacity-50"
+					>
+						{guestSubmitting ? '驗證中…' : '繼續預約'}
+					</button>
+					<p class="text-xs leading-relaxed text-[#9a918a]">
+						訪客預約僅保存在這個瀏覽器，可查看與取消本次預約；換裝置請改用 Google 登入。
+					</p>
+				</form>
+			</div>
+		{:else if !showBookingForm}
 			<div class="flex flex-col items-center justify-center py-20 text-gray-500">
 				<div
 					class="mb-4 h-8 w-8 animate-spin rounded-full border-4 border-[#8F9E91] border-t-transparent"
@@ -393,8 +648,18 @@
 				<p>LINE 登入載入中...</p>
 			</div>
 		{:else}
+			{#if error}
+				<div class="mb-6 rounded-xl border border-red-100 bg-red-50 p-4 text-red-600">
+					<p class="font-medium">發生錯誤</p>
+					<p class="text-sm opacity-90">{error}</p>
+				</div>
+			{/if}
 			<form method="POST" use:enhance={handleEnhance} class="space-y-8">
+				<input type="hidden" name="authProvider" value={authProviderValue} />
 				<input type="hidden" name="accessToken" value={accessToken} />
+				<input type="hidden" name="googleIdToken" value={googleIdToken} />
+				<input type="hidden" name="guestPhone" value={guestPhone || webProfile?.phone || ''} />
+				<input type="hidden" name="guestName" value={guestName || webProfile?.displayName || ''} />
 				<input type="hidden" name="partySize" value={partySize} />
 				<input type="hidden" name="servicesJson" value={servicesJsonValue} />
 				<input type="hidden" name="appointmentDate" value="{selectedDate}T{selectedTime}" />
@@ -787,7 +1052,7 @@
 							>
 							<button
 								type="submit"
-								disabled={!selectedTime || !accessToken || isSubmitting}
+								disabled={!selectedTime || !canSubmitBooking || isSubmitting}
 								class="ml-4 flex flex-1 items-center justify-center gap-2 rounded-xl bg-[#8F9E91] px-8 py-3 font-medium text-white shadow-md transition-all hover:bg-[#7A8A7C] hover:shadow-lg disabled:cursor-not-allowed disabled:opacity-50"
 							>
 								{#if isSubmitting}
