@@ -1,8 +1,11 @@
 import type { PageServerLoad } from './$types';
 import { buildAdminDashboardStats, getAdminRecord, listAdminBookings } from '$lib/server/admin';
 import { getDbErrorMessage } from '$lib/server/db';
+import { isWebPushConfigured } from '$lib/server/notifications/webpush';
 
 export const load: PageServerLoad = async ({ locals, platform }) => {
+	const webPushConfigured = isWebPushConfigured(platform?.env);
+
 	if (!locals.lineUserId) {
 		return {
 			authState: 'needs-session' as const,
@@ -10,7 +13,8 @@ export const load: PageServerLoad = async ({ locals, platform }) => {
 			adminName: '',
 			records: [],
 			stats: null,
-			errorMessage: ''
+			errorMessage: '',
+			webPushConfigured
 		};
 	}
 
@@ -24,7 +28,8 @@ export const load: PageServerLoad = async ({ locals, platform }) => {
 				adminName: '',
 				records: [],
 				stats: null,
-				errorMessage: ''
+				errorMessage: '',
+				webPushConfigured
 			};
 		}
 
@@ -36,7 +41,8 @@ export const load: PageServerLoad = async ({ locals, platform }) => {
 			adminName: adminRecord.name,
 			records,
 			stats: buildAdminDashboardStats(records),
-			errorMessage: ''
+			errorMessage: '',
+			webPushConfigured
 		};
 	} catch (err) {
 		console.error('Failed to load admin dashboard:', err);
@@ -46,7 +52,8 @@ export const load: PageServerLoad = async ({ locals, platform }) => {
 			adminName: '',
 			records: [],
 			stats: null,
-			errorMessage: getDbErrorMessage(err, '後台資料載入失敗，請稍後再試。')
+			errorMessage: getDbErrorMessage(err, '後台資料載入失敗，請稍後再試。'),
+			webPushConfigured
 		};
 	}
 };

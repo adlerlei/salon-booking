@@ -101,6 +101,8 @@
 	let closureReason = $state('');
 	let closureSubmitting = $state(false);
 	let closureError = $state('');
+	let pushStatus = $state('');
+	let pushBusy = $state(false);
 
 	const loadClosures = async () => {
 		try {
@@ -622,10 +624,70 @@
 	);
 
 	const agendaDayGroups = $derived(groupBookingsByDay(upcomingBookings));
+
+	const urlBase64ToUint8Array = (base64String: string) => {
+		const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+		const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+		const rawData = atob(base64);
+		return Uint8Array.from([...rawData].map((char) => char.charCodeAt(0)));
+	};
+
+	const enableWebPush = async () => {
+		pushBusy = true;
+		pushStatus = '';
+		try {
+			if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+				throw new Error('此裝置不支援 Web Push');
+			}
+
+			const permission = await Notification.requestPermission();
+			if (permission !== 'granted') {
+				throw new Error('尚未允許通知權限');
+			}
+
+			const registration = await navigator.serviceWorker.register('/service-worker.js');
+			await navigator.serviceWorker.ready;
+
+			const keyRes = await fetch('/api/admin/push/vapid-key', { cache: 'no-store' });
+			const keyJson = (await keyRes.json()) as {
+				configured?: boolean;
+				publicKey?: string;
+				message?: string;
+			};
+			if (!keyRes.ok || !keyJson.configured || !keyJson.publicKey) {
+				throw new Error(keyJson.message || '尚未設定 VAPID 金鑰');
+			}
+
+			const subscription = await registration.pushManager.subscribe({
+				userVisibleOnly: true,
+				applicationServerKey: urlBase64ToUint8Array(keyJson.publicKey)
+			});
+
+			const saveRes = await fetch('/api/admin/push/subscribe', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify(subscription.toJSON())
+			});
+			const saveJson = (await saveRes.json()) as { success?: boolean; message?: string };
+			if (!saveRes.ok || !saveJson.success) {
+				throw new Error(saveJson.message || '儲存推播訂閱失敗');
+			}
+
+			pushStatus = '已開啟手機推播';
+		} catch (err: any) {
+			pushStatus = err?.message || '開啟推播失敗';
+		} finally {
+			pushBusy = false;
+		}
+	};
 </script>
 
 <svelte:head>
 	<title>管理後台 — Jo造型髮藝</title>
+	<link rel="manifest" href="/manifest.webmanifest" />
+	<meta name="theme-color" content="#8F9E91" />
+	<meta name="apple-mobile-web-app-capable" content="yes" />
+	<meta name="apple-mobile-web-app-title" content="Jo預約管理" />
 </svelte:head>
 
 <div
@@ -839,6 +901,34 @@
 						{error}
 					</div>
 				{/if}
+
+				<div
+					class="mt-4 flex flex-col gap-2 rounded-[22px] border border-[#eadfd4] bg-white/70 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+				>
+					<div class="text-sm text-[#5f5750]">
+						<p class="font-medium">新預約通知</p>
+						<p class="mt-0.5 text-xs text-[#8a8179]">
+							{#if data.webPushConfigured}
+								可加入主畫面並開啟推播；Telegram 若已設定會同步送到群組。
+							{:else}
+								Web Push 金鑰尚未設定（見 SETUP-TODO.md）；Telegram 設定後即可先收群組通知。
+							{/if}
+						</p>
+						{#if pushStatus}
+							<p class="mt-1 text-xs text-[#6b7d6d]">{pushStatus}</p>
+						{/if}
+					</div>
+					{#if data.webPushConfigured}
+						<button
+							type="button"
+							class="shrink-0 rounded-full bg-[#2C302E] px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+							onclick={enableWebPush}
+							disabled={pushBusy}
+						>
+							{pushBusy ? '開啟中…' : '開啟手機推播'}
+						</button>
+					{/if}
+				</div>
 			</section>
 
 			<!-- Agenda Tab -->
@@ -903,6 +993,13 @@
 																class="rounded-full bg-[#8F9E91]/15 px-2 py-0.5 text-xs font-medium text-[#61705f]"
 															>
 																{record.partySize}人
+															</span>
+														{/if}
+														{#if record.source && record.source !== 'line'}
+															<span
+																class="rounded-full bg-[#ece7e1] px-2 py-0.5 text-[10px] font-medium text-[#6b625b]"
+															>
+																{record.source === 'google' ? 'Google' : '訪客'}
 															</span>
 														{/if}
 													</div>

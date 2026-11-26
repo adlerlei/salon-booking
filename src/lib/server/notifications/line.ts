@@ -3,9 +3,13 @@ import { listAdminRecords } from '$lib/server/admin';
 import type { AdminRecord } from '$lib/server/admin';
 import { initDb } from '$lib/server/db';
 import { notificationStates } from '$lib/server/db/schema';
+import {
+	buildBookingNotificationText,
+	DEFAULT_ADMIN_DASHBOARD_URL,
+	type BookingNotificationPayload
+} from './message';
 
 const NOTIFICATION_KEY = 'admin-booking-line';
-const DEFAULT_ADMIN_DASHBOARD_URL = 'https://liff.line.me/2009342816-q0rukZhq/admin';
 
 type QuotaResponse = {
 	type: 'none' | 'limited';
@@ -14,13 +18,6 @@ type QuotaResponse = {
 
 type QuotaConsumptionResponse = {
 	totalUsage: number;
-};
-
-type BookingNotificationPayload = {
-	customerName: string;
-	serviceType: string;
-	durationMinutes: number;
-	appointmentDate: string;
 };
 
 type NotificationState = typeof notificationStates.$inferSelect;
@@ -48,23 +45,6 @@ const getQuotaPeriod = (now = new Date()) => {
 	});
 
 	return formatter.format(now).slice(0, 7);
-};
-
-const formatBookingDateTime = (appointmentDate: string) => {
-	const [datePart, timePart = '00:00'] = appointmentDate.split('T');
-	const [year, month, day] = datePart.split('-').map(Number);
-	const [hour, minute] = timePart.split(':').map(Number);
-	const date = new Date(year, month - 1, day, hour, minute);
-
-	return new Intl.DateTimeFormat('zh-TW', {
-		year: 'numeric',
-		month: 'numeric',
-		day: 'numeric',
-		weekday: 'short',
-		hour: '2-digit',
-		minute: '2-digit',
-		hour12: false
-	}).format(date);
 };
 
 const fetchLineApi = async <T>(accessToken: string, path: string, init?: RequestInit) => {
@@ -116,29 +96,6 @@ const sendTextPushes = async (accessToken: string, userIds: string[], text: stri
 	}
 
 	return results.filter((result) => result.status === 'fulfilled').length;
-};
-
-const formatEndTime = (appointmentDate: string, durationMinutes: number) => {
-	const [datePart, timePart = '00:00'] = appointmentDate.split('T');
-	const [year, month, day] = datePart.split('-').map(Number);
-	const [hour, minute] = timePart.split(':').map(Number);
-	const end = new Date(year, month - 1, day, hour, minute + durationMinutes);
-	const h = String(end.getHours()).padStart(2, '0');
-	const m = String(end.getMinutes()).padStart(2, '0');
-	return `${h}:${m}`;
-};
-
-const buildBookingMessage = (payload: BookingNotificationPayload, adminUrl: string) => {
-	const startTime = payload.appointmentDate.split('T')[1] || '';
-	const endTime = formatEndTime(payload.appointmentDate, payload.durationMinutes);
-	return [
-		'【新預約】',
-		payload.customerName,
-		payload.serviceType.replaceAll('・', '\n'),
-		formatBookingDateTime(payload.appointmentDate),
-		`${startTime} ~ ${endTime}`,
-		`後台：${adminUrl}`
-	].join('\n');
 };
 
 const buildQuotaWarningMessage = (period: string, adminUrl: string) =>
@@ -300,7 +257,7 @@ export const notifyAdminsAboutNewBooking = async (
 		return { sent: false, reason: 'quota_low' as const };
 	}
 
-	const bookingMessage = buildBookingMessage(payload, adminUrl);
+	const bookingMessage = buildBookingNotificationText(payload, adminUrl);
 	const deliveredCount = await sendTextPushes(accessToken, adminUserIds, bookingMessage);
 
 	const estimatedRemaining = remaining - Math.max(deliveredCount, 0);

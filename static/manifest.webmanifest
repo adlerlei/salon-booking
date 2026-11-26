@@ -1,0 +1,19 @@
+{
+	"name": "Jo造型髮藝 預約管理",
+	"short_name": "Jo預約管理",
+	"description": "Jo造型髮藝管理後台",
+	"start_url": "/admin",
+	"scope": "/",
+	"display": "standalone",
+	"background_color": "#F9F8F6",
+	"theme_color": "#8F9E91",
+	"lang": "zh-TW",
+	"icons": [
+		{
+			"src": "/favicon.svg",
+			"sizes": "any",
+			"type": "image/svg+xml",
+			"purpose": "any"
+		}
+	]
+}

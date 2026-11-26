@@ -29,6 +29,7 @@
 		"@tailwindcss/vite": "^4.1.18",
 		"@types/better-sqlite3": "^7.6.13",
 		"@types/node": "^22",
+		"@types/web-push": "^3.6.4",
 		"@vitejs/plugin-basic-ssl": "^2.1.4",
 		"drizzle-kit": "^0.31.8",
 		"drizzle-orm": "^0.45.1",
@@ -49,6 +50,7 @@
 	},
 	"dependencies": {
 		"@line/liff": "^2.32.0",
-		"better-sqlite3": "^12.6.2"
+		"better-sqlite3": "^12.6.2",
+		"web-push": "^4.0.0"
 	}
 }

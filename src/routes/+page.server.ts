@@ -15,7 +15,7 @@ import {
 } from '$lib/server/auth/guest';
 import type { AuthIdentity, AuthProvider } from '$lib/server/auth/types';
 import { countFutureConfirmedByPhone } from '$lib/server/bookings';
-import { notifyAdminsAboutNewBooking } from '$lib/server/notifications/line';
+import { notifyAdminsAboutNewBooking } from '$lib/server/notifications';
 import { listActiveAnnouncements } from '$lib/server/news';
 import { toTaipeiNowString } from '$lib/server/time';
 
@@ -392,7 +392,9 @@ export const actions = {
 				customerName: notifyName,
 				serviceType,
 				durationMinutes,
-				appointmentDate
+				appointmentDate,
+				source: identity.provider,
+				phone: identity.phone || null
 			}).catch((error) => {
 				console.error('Failed to notify admins about new booking', error);
 			});

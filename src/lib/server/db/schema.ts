@@ -80,6 +80,20 @@ export const announcements = sqliteTable('announcements', {
 		.$defaultFn(() => new Date())
 });
 
+export const pushSubscriptions = sqliteTable('push_subscriptions', {
+	endpoint: text('endpoint').primaryKey(),
+	p256dh: text('p256dh').notNull(),
+	auth: text('auth').notNull(),
+	userAgent: text('user_agent'),
+	createdBy: text('created_by').notNull(),
+	createdAt: integer('created_at', { mode: 'timestamp' })
+		.notNull()
+		.$defaultFn(() => new Date()),
+	updatedAt: integer('updated_at', { mode: 'timestamp' })
+		.notNull()
+		.$defaultFn(() => new Date())
+});
+
 export const articles = sqliteTable('articles', {
 	id: text('id')
 		.primaryKey()
