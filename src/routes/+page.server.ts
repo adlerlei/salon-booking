@@ -2,7 +2,6 @@ import { getDbErrorMessage, initDb } from '$lib/server/db';
 import { appointments, closures } from '$lib/server/db/schema';
 import { and, desc, eq, gte, lt } from 'drizzle-orm';
 import { verifyLineAccessToken } from '$lib/server/auth/line';
-import { isGoogleAuthConfigured, verifyGoogleIdToken } from '$lib/server/auth/google';
 import {
 	createAuthSession,
 	sessionCookieOptions,
@@ -30,13 +29,9 @@ const timeToMinutes = (timeStr: string) => {
 	return hours * 60 + minutes;
 };
 
-export const load = async ({ platform, locals }) => {
-	const googleClientId =
-		platform?.env?.GOOGLE_CLIENT_ID ||
-		process.env.GOOGLE_CLIENT_ID ||
-		process.env.PUBLIC_GOOGLE_CLIENT_ID ||
-		'';
+const createManageToken = () => crypto.randomUUID().replaceAll('-', '') + crypto.randomUUID().replaceAll('-', '');
 
+export const load = async ({ platform, locals }) => {
 	try {
 		const db = initDb(platform);
 		const today = toTaipeiNowString().split('T')[0];
@@ -67,8 +62,6 @@ export const load = async ({ platform, locals }) => {
 			announcements: bookingAnnouncements,
 			loadError: '',
 			auth: locals.auth,
-			googleEnabled: isGoogleAuthConfigured(platform?.env),
-			googleClientId,
 			turnstileSiteKey: getTurnstileSiteKey(platform?.env),
 			turnstileEnabled: isTurnstileConfigured(platform?.env)
 		};
@@ -80,8 +73,6 @@ export const load = async ({ platform, locals }) => {
 			announcements: [],
 			loadError: getDbErrorMessage(err, '系統資料載入失敗，請稍後再試。'),
 			auth: locals.auth,
-			googleEnabled: isGoogleAuthConfigured(platform?.env),
-			googleClientId,
 			turnstileSiteKey: getTurnstileSiteKey(platform?.env),
 			turnstileEnabled: isTurnstileConfigured(platform?.env)
 		};
@@ -105,7 +96,6 @@ const resolveIdentityFromForm = async ({
 }): Promise<{ identity: AuthIdentity } | { error: string }> => {
 	const authProvider = (data.get('authProvider') as AuthProvider | '') || '';
 	const accessToken = (data.get('accessToken') as string) || '';
-	const googleIdToken = (data.get('googleIdToken') as string) || '';
 	const guestPhoneRaw = (data.get('guestPhone') as string) || '';
 	const guestName = ((data.get('guestName') as string) || '').trim();
 
@@ -115,32 +105,29 @@ const resolveIdentityFromForm = async ({
 		if (!accessToken) return { error: '缺少 LINE 驗證資訊' };
 		const profile = await verifyLineAccessToken(accessToken);
 		identity = { provider: 'line', subject: profile.sub, name: profile.name || null };
-	} else if (authProvider === 'google' || (!authProvider && googleIdToken)) {
-		if (!googleIdToken) return { error: '缺少 Google 登入資訊' };
-		const profile = await verifyGoogleIdToken(googleIdToken, platform?.env);
-		identity = {
-			provider: 'google',
-			subject: profile.sub,
-			name: profile.name || null,
-			email: profile.email || null
-		};
 	} else if (authProvider === 'guest' || (!authProvider && guestPhoneRaw)) {
 		const phone = normalizeTaiwanMobile(guestPhoneRaw || existingAuth?.phone || '');
+		if (!guestName) {
+			return { error: '請填寫稱呼／姓名' };
+		}
 		if (!isValidTaiwanMobile(phone)) {
 			return { error: '請輸入有效的台灣手機號碼（09 開頭共 10 碼）' };
 		}
 		identity = {
 			provider: 'guest',
 			subject: existingAuth?.provider === 'guest' ? existingAuth.subject : createGuestSubject(),
-			name: guestName || existingAuth?.name || null,
+			name: guestName,
 			phone
 		};
-	} else if (existingAuth) {
+	} else if (existingAuth?.provider === 'line' || existingAuth?.provider === 'guest') {
+		if (existingAuth.provider === 'guest' && !existingAuth.name) {
+			return { error: '請填寫稱呼／姓名' };
+		}
 		identity = existingAuth;
 	}
 
 	if (!identity) {
-		return { error: '請先以 LINE、Google 登入，或填寫手機號碼後再預約' };
+		return { error: '請先以 LINE 登入，或填寫姓名與手機號碼後再預約' };
 	}
 
 	cookies.set(
@@ -303,7 +290,6 @@ export const actions = {
 				return { success: false, message: '這個時段已經被預約，請重新選擇' };
 			}
 
-			// 短時間重複提交：同一身份、同一時段、同一服務內容
 			const recentDuplicates = await db
 				.select({
 					id: appointments.id,
@@ -333,7 +319,6 @@ export const actions = {
 				}
 			}
 
-			// 寫入前再檢查一次時段衝突，降低併發雙寫機率
 			const recheckAppointments = await db
 				.select({
 					appointmentDate: appointments.appointmentDate,
@@ -364,13 +349,8 @@ export const actions = {
 				return { success: false, message: '這個時段剛剛被預約，請重新選擇' };
 			}
 
-			const customerName =
-				identity.name ||
-				(identity.provider === 'guest'
-					? '訪客'
-					: identity.provider === 'google'
-						? 'Google 用戶'
-						: 'LINE 使用者');
+			const customerName = identity.name || (identity.provider === 'guest' ? '訪客' : 'LINE 使用者');
+			const manageToken = identity.provider === 'guest' ? createManageToken() : null;
 
 			await db.insert(appointments).values({
 				lineUserId: identity.provider === 'line' ? identity.subject : null,
@@ -385,6 +365,7 @@ export const actions = {
 				phone: identity.phone || null,
 				email: identity.email || null,
 				source: identity.provider,
+				manageToken,
 				createdAt: new Date()
 			});
 
@@ -413,7 +394,8 @@ export const actions = {
 				date: appointmentDate,
 				name: customerName,
 				duration: String(durationMinutes),
-				partySize: String(partySize)
+				partySize: String(partySize),
+				manageToken: manageToken || ''
 			};
 		} catch (err) {
 			console.error('Booking failed:', err);

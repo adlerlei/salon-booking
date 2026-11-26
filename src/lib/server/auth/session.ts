@@ -53,7 +53,7 @@ const sign = async (value: string, secret: string) => {
 };
 
 const isAuthProvider = (value: unknown): value is AuthProvider =>
-	value === 'line' || value === 'google' || value === 'guest';
+	value === 'line' || value === 'guest';
 
 export const createAuthSession = async (identity: AuthIdentity, env: Env | undefined) => {
 	const payload = {

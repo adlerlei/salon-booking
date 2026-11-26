@@ -14,15 +14,17 @@ export const appointments = sqliteTable('appointments', {
 		.default('confirmed'),
 	partySize: integer('party_size').notNull().default(1),
 	servicesJson: text('services_json'), // JSON array: [{service, duration}, ...] for multi-person bookings
-	authProvider: text('auth_provider', { enum: ['line', 'google', 'guest'] })
+	authProvider: text('auth_provider', { enum: ['line', 'guest'] })
 		.notNull()
 		.default('line'),
 	authSubject: text('auth_subject').notNull().default(''),
 	phone: text('phone'),
 	email: text('email'),
-	source: text('source', { enum: ['line', 'google', 'guest'] })
+	source: text('source', { enum: ['line', 'guest'] })
 		.notNull()
 		.default('line'),
+	/** 訪客專屬管理／取消連結用；LINE 預約可為空 */
+	manageToken: text('manage_token').unique(),
 	createdAt: integer('created_at', { mode: 'timestamp' }).$defaultFn(() => new Date())
 });
 

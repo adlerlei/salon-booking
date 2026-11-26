@@ -12,6 +12,10 @@ export async function POST({ request, cookies, platform, url }) {
 		const phone = normalizeTaiwanMobile(body.phone || '');
 		const name = (body.name || '').trim();
 
+		if (!name) {
+			return json({ success: false, message: '請填寫稱呼／姓名' }, { status: 400 });
+		}
+
 		if (!isValidTaiwanMobile(phone)) {
 			return json(
 				{ success: false, message: '請輸入有效的台灣手機號碼（09 開頭共 10 碼）' },
@@ -23,7 +27,7 @@ export async function POST({ request, cookies, platform, url }) {
 			{
 				provider: 'guest',
 				subject: createGuestSubject(),
-				name: name || null,
+				name,
 				phone
 			},
 			platform?.env
@@ -34,7 +38,7 @@ export async function POST({ request, cookies, platform, url }) {
 		return json({
 			success: true,
 			provider: 'guest',
-			name: name || '',
+			name,
 			phone
 		});
 	} catch {

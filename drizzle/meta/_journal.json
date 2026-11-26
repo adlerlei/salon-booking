@@ -64,6 +64,13 @@
       "when": 1779903600000,
       "tag": "0008_push_subscriptions",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1779910000000,
+      "tag": "0009_manage_token",
+      "breakpoints": true
     }
   ]
 }

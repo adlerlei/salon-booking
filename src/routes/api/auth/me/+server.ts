@@ -1,14 +1,9 @@
 import { json } from '@sveltejs/kit';
-import { isGoogleAuthConfigured } from '$lib/server/auth/google';
+import { isWebPushConfigured } from '$lib/server/notifications/webpush';
 
 export async function GET({ locals, platform }) {
 	return json({
 		auth: locals.auth,
-		googleEnabled: isGoogleAuthConfigured(platform?.env),
-		publicGoogleClientId:
-			platform?.env?.GOOGLE_CLIENT_ID ||
-			process.env.GOOGLE_CLIENT_ID ||
-			process.env.PUBLIC_GOOGLE_CLIENT_ID ||
-			''
+		webPushConfigured: isWebPushConfigured(platform?.env)
 	});
 }

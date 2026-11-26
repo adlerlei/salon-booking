@@ -1,26 +1,24 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { fade, slide, scale } from 'svelte/transition';
+	import { resolve } from '$app/paths';
 	import type { PageData } from './$types';
 
 	export let data: PageData;
 
 	let profile: any = null;
-	let webName = '';
 	let accessToken = '';
 	let error = '';
 	let bookings: any[] = [];
 	let loading = true;
 	let authMode: 'loading' | 'line' | 'web' = 'loading';
-	let googleReady = false;
 
-	// For cancellation
 	let cancellingId: string | null = null;
 	let showConfirmModal = false;
 	let appointmentToCancel: any = null;
 
-	$: displayName = profile?.displayName || webName || data.auth?.name || '';
-	$: isAuthed = Boolean(profile || data.auth || webName);
+	$: displayName = profile?.displayName || data.auth?.name || '';
+	$: isAuthed = Boolean(profile || (data.auth?.provider === 'line'));
 
 	const syncLineSession = async () => {
 		if (!accessToken) {
@@ -50,77 +48,9 @@
 		}
 	};
 
-	const loadGoogleButton = async (clientId: string) => {
-		if (!clientId) return;
-		await new Promise<void>((resolve, reject) => {
-			if (document.getElementById('google-identity')) {
-				resolve();
-				return;
-			}
-			const script = document.createElement('script');
-			script.id = 'google-identity';
-			script.src = 'https://accounts.google.com/gsi/client';
-			script.async = true;
-			script.onload = () => resolve();
-			script.onerror = () => reject(new Error('Google 登入元件載入失敗'));
-			document.head.appendChild(script);
-		});
-
-		const google = (window as any).google;
-		if (!google?.accounts?.id) return;
-
-		google.accounts.id.initialize({
-			client_id: clientId,
-			callback: async (response: { credential: string }) => {
-				try {
-					error = '';
-					loading = true;
-					const res = await fetch('/api/auth/google', {
-						method: 'POST',
-						headers: { 'Content-Type': 'application/json' },
-						body: JSON.stringify({ idToken: response.credential })
-					});
-					const json = (await res.json()) as {
-						success: boolean;
-						message?: string;
-						name?: string;
-					};
-					if (!res.ok || !json.success) {
-						throw new Error(json.message || 'Google 登入失敗');
-					}
-					webName = json.name || 'Google 用戶';
-					await fetchBookings();
-				} catch (err: any) {
-					error = err.message || 'Google 登入失敗';
-					loading = false;
-				}
-			}
-		});
-
-		const mount = document.getElementById('google-signin-button');
-		if (mount) {
-			mount.innerHTML = '';
-			google.accounts.id.renderButton(mount, {
-				theme: 'outline',
-				size: 'large',
-				width: 320,
-				text: 'continue_with',
-				shape: 'rectangular'
-			});
-			googleReady = true;
-		}
-	};
-
 	onMount(async () => {
-		if (data.auth) {
-			webName =
-				data.auth.name ||
-				(data.auth.provider === 'guest'
-					? '訪客'
-					: data.auth.provider === 'google'
-						? 'Google 用戶'
-						: 'LINE 使用者');
-			authMode = data.auth.provider === 'line' ? 'line' : 'web';
+		if (data.auth?.provider === 'line') {
+			authMode = 'line';
 			await fetchBookings();
 		}
 
@@ -129,7 +59,7 @@
 			const liff = liffModule.default;
 			await liff.init({ liffId: '2009342816-q0rukZhq' });
 
-			if (liff.isInClient()) {
+			if (liff.isInClient() || liff.isLoggedIn()) {
 				authMode = 'line';
 				if (liff.isLoggedIn()) {
 					profile = await liff.getProfile();
@@ -142,34 +72,12 @@
 				return;
 			}
 
-			if (liff.isLoggedIn()) {
-				authMode = 'line';
-				profile = await liff.getProfile();
-				accessToken = liff.getAccessToken() || '';
-				await syncLineSession();
-				await fetchBookings();
-				return;
-			}
-
 			authMode = 'web';
-			if (!data.auth) {
-				loading = false;
-				if (data.googleEnabled && data.googleClientId) {
-					await loadGoogleButton(data.googleClientId);
-				}
-			}
+			loading = false;
 		} catch (err: any) {
 			authMode = 'web';
-			if (!data.auth) {
-				loading = false;
-				if (data.googleEnabled && data.googleClientId) {
-					try {
-						await loadGoogleButton(data.googleClientId);
-					} catch (googleErr: any) {
-						error = googleErr.message || err.message;
-					}
-				}
-			}
+			loading = false;
+			if (!data.auth) error = err.message;
 		}
 	});
 
@@ -266,35 +174,18 @@
 				<p class="font-medium">發生錯誤</p>
 				<p class="text-sm opacity-90">{error}</p>
 			</div>
-		{:else if !isAuthed && authMode === 'web'}
-			<div class="space-y-6 rounded-2xl border border-[#e6ddd3] bg-white p-6 shadow-sm">
-				<div>
-					<h2 class="text-lg font-semibold">查看我的預約</h2>
-					<p class="mt-1 text-sm text-[#7f766f]">請使用當初預約時的登入方式。</p>
-				</div>
-
-				{#if error}
-					<div class="rounded-xl border border-red-100 bg-red-50 p-3 text-sm text-red-600">{error}</div>
-				{/if}
-
-				{#if data.googleEnabled}
-					<div class="space-y-2">
-						<p class="text-xs font-medium tracking-wide text-[#61705f]">GOOGLE 登入</p>
-						<div id="google-signin-button" class="flex justify-center"></div>
-						{#if !googleReady}
-							<p class="text-center text-xs text-[#9a918a]">Google 按鈕載入中…</p>
-						{/if}
-					</div>
-				{:else}
-					<p class="rounded-xl bg-[#f9f6f3] p-3 text-sm text-[#5c554f]">
-						Google 登入尚未設定。若你是訪客預約，請用當初預約的同一個瀏覽器開啟此頁。
-					</p>
-				{/if}
-
-				<p class="text-xs leading-relaxed text-[#9a918a]">
-					訪客預約綁定瀏覽器 Session，無法只靠手機號碼在其他裝置查出預約；之後建議改用 Google
-					登入。
+		{:else if !isAuthed}
+			<div class="space-y-4 rounded-2xl border border-[#e6ddd3] bg-white p-6 shadow-sm">
+				<h2 class="text-lg font-semibold">查看我的預約</h2>
+				<p class="text-sm text-[#7f766f]">
+					LINE 熟客請從官方帳號圖文選單進入。若你是網頁訪客預約，請使用預約成功頁的「專屬管理連結」。
 				</p>
+				<a
+					href={resolve('/')}
+					class="inline-flex rounded-xl bg-[#2C302E] px-4 py-3 text-sm font-medium text-white"
+				>
+					前往預約
+				</a>
 			</div>
 		{:else}
 			{#if upcomingBookings().length === 0 && pastBookings().length === 0}

@@ -1,4 +1,4 @@
-export type AuthProvider = 'line' | 'google' | 'guest';
+export type AuthProvider = 'line' | 'guest';
 
 export type BookingSource = AuthProvider;
 

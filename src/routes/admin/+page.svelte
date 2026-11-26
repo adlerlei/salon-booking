@@ -909,9 +909,9 @@
 						<p class="font-medium">新預約通知</p>
 						<p class="mt-0.5 text-xs text-[#8a8179]">
 							{#if data.webPushConfigured}
-								可加入主畫面並開啟推播；Telegram 若已設定會同步送到群組。
+								可加入主畫面並開啟推播；LINE 通知（有額度時）會並行發送。
 							{:else}
-								Web Push 金鑰尚未設定（見 SETUP-TODO.md）；Telegram 設定後即可先收群組通知。
+								Web Push 金鑰尚未設定（見 SETUP-TODO.md）。設定後即可在鎖屏收到新預約。
 							{/if}
 						</p>
 						{#if pushStatus}
@@ -995,12 +995,15 @@
 																{record.partySize}人
 															</span>
 														{/if}
-														{#if record.source && record.source !== 'line'}
+														{#if record.source === 'guest'}
 															<span
 																class="rounded-full bg-[#ece7e1] px-2 py-0.5 text-[10px] font-medium text-[#6b625b]"
 															>
-																{record.source === 'google' ? 'Google' : '訪客'}
+																訪客
 															</span>
+														{/if}
+														{#if record.phone}
+															<span class="text-[10px] text-[#9b9086]">{record.phone}</span>
 														{/if}
 													</div>
 

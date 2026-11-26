@@ -11,22 +11,19 @@
 
 	type AuthMode = 'loading' | 'line' | 'web';
 	type WebProfile = {
-		provider: 'google' | 'guest' | 'line';
+		provider: 'guest' | 'line';
 		displayName: string;
 		pictureUrl?: string;
 		phone?: string;
-		email?: string;
 	};
 
 	let authMode: AuthMode = 'loading';
 	let profile: any = null;
 	let webProfile: WebProfile | null = null;
 	let accessToken = '';
-	let googleIdToken = '';
 	let guestPhone = '';
 	let guestName = '';
 	let guestSubmitting = false;
-	let googleReady = false;
 	let error = '';
 	let isSubmitting = false;
 	let isMarqueePaused = false;
@@ -38,10 +35,10 @@
 		: webProfile?.provider || data.auth?.provider || '';
 	$: canSubmitBooking = Boolean(
 		(authProviderValue === 'line' && accessToken) ||
-			(authProviderValue === 'google' && (googleIdToken || data.auth?.provider === 'google')) ||
 			(authProviderValue === 'guest' &&
+				guestName &&
 				(guestPhone || data.auth?.phone || webProfile?.phone)) ||
-			data.auth
+			(data.auth?.provider === 'line' || data.auth?.provider === 'guest')
 	);
 	$: showBookingForm = Boolean(profile || webProfile || data.auth);
 
@@ -57,6 +54,7 @@
 					duration: d.duration,
 					partySize: d.partySize || '1'
 				});
+				if (d.manageToken) params.set('token', d.manageToken);
 				await goto(`/booking-success?${params.toString()}`);
 			} else {
 				error = result.data?.message || '預約失敗，請稍後再試。';
@@ -67,84 +65,14 @@
 
 	const applyServerAuth = () => {
 		if (!data.auth) return;
+		if (data.auth.provider !== 'line' && data.auth.provider !== 'guest') return;
 		webProfile = {
 			provider: data.auth.provider,
-			displayName:
-				data.auth.name ||
-				(data.auth.provider === 'guest'
-					? '訪客'
-					: data.auth.provider === 'google'
-						? 'Google 用戶'
-						: 'LINE 使用者'),
-			phone: data.auth.phone || undefined,
-			email: data.auth.email || undefined
+			displayName: data.auth.name || (data.auth.provider === 'guest' ? '訪客' : 'LINE 使用者'),
+			phone: data.auth.phone || undefined
 		};
 		if (data.auth.phone) guestPhone = data.auth.phone;
 		if (data.auth.name) guestName = data.auth.name;
-	};
-
-	const loadGoogleButton = async (clientId: string) => {
-		if (!clientId || typeof window === 'undefined') return;
-		await new Promise<void>((resolve, reject) => {
-			if (document.getElementById('google-identity')) {
-				resolve();
-				return;
-			}
-			const script = document.createElement('script');
-			script.id = 'google-identity';
-			script.src = 'https://accounts.google.com/gsi/client';
-			script.async = true;
-			script.onload = () => resolve();
-			script.onerror = () => reject(new Error('Google 登入元件載入失敗'));
-			document.head.appendChild(script);
-		});
-
-		const google = (window as any).google;
-		if (!google?.accounts?.id) return;
-
-		google.accounts.id.initialize({
-			client_id: clientId,
-			callback: async (response: { credential: string }) => {
-				try {
-					error = '';
-					const res = await fetch('/api/auth/google', {
-						method: 'POST',
-						headers: { 'Content-Type': 'application/json' },
-						body: JSON.stringify({ idToken: response.credential })
-					});
-					const json = (await res.json()) as {
-						success: boolean;
-						message?: string;
-						name?: string;
-						email?: string;
-					};
-					if (!res.ok || !json.success) {
-						throw new Error(json.message || 'Google 登入失敗');
-					}
-					googleIdToken = response.credential;
-					webProfile = {
-						provider: 'google',
-						displayName: json.name || 'Google 用戶',
-						email: json.email
-					};
-				} catch (err: any) {
-					error = err.message || 'Google 登入失敗';
-				}
-			}
-		});
-
-		const mount = document.getElementById('google-signin-button');
-		if (mount) {
-			mount.innerHTML = '';
-			google.accounts.id.renderButton(mount, {
-				theme: 'outline',
-				size: 'large',
-				width: 320,
-				text: 'continue_with',
-				shape: 'rectangular'
-			});
-			googleReady = true;
-		}
 	};
 
 	const loadTurnstile = async (siteKey: string) => {
@@ -182,13 +110,16 @@
 		guestSubmitting = true;
 		error = '';
 		try {
+			if (!guestName.trim()) {
+				throw new Error('請填寫稱呼／姓名');
+			}
 			if (data.turnstileEnabled && !turnstileToken) {
 				throw new Error('請先完成防機器人驗證');
 			}
 			const res = await fetch('/api/auth/guest', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ phone: guestPhone, name: guestName })
+				body: JSON.stringify({ phone: guestPhone, name: guestName.trim() })
 			});
 			const json = (await res.json()) as {
 				success: boolean;
@@ -201,7 +132,7 @@
 			}
 			webProfile = {
 				provider: 'guest',
-				displayName: json.name || '訪客',
+				displayName: json.name || guestName.trim(),
 				phone: json.phone
 			};
 		} catch (err: any) {
@@ -256,24 +187,13 @@
 				return;
 			}
 
-			if (!webProfile && data.googleEnabled && data.googleClientId) {
-				await loadGoogleButton(data.googleClientId);
-			}
 			if (!webProfile && data.turnstileEnabled && data.turnstileSiteKey) {
 				await loadTurnstile(data.turnstileSiteKey);
 			}
 		} catch (err: any) {
 			authMode = 'web';
 			if (!webProfile) {
-				// 非 LINE 環境且 LIFF 初始化失敗時，改走網頁身分
 				console.warn('LIFF init skipped for web booking:', err?.message || err);
-			}
-			if (data.googleEnabled && data.googleClientId) {
-				try {
-					await loadGoogleButton(data.googleClientId);
-				} catch (googleErr: any) {
-					error = googleErr.message || error;
-				}
 			}
 			if (data.turnstileEnabled && data.turnstileSiteKey) {
 				try {
@@ -610,7 +530,7 @@
 				<div>
 					<h2 class="text-lg font-semibold text-[#2C302E]">開始預約</h2>
 					<p class="mt-1 text-sm text-[#7f766f]">
-						建議使用 Google 登入，方便之後跨裝置查看與取消預約。也可改填手機號碼繼續。
+						請填寫姓名與手機號碼。預約成功後會提供專屬連結，方便之後查看或取消。
 					</p>
 				</div>
 
@@ -620,30 +540,16 @@
 					</div>
 				{/if}
 
-				{#if data.googleEnabled}
-					<div class="space-y-2">
-						<p class="text-xs font-medium tracking-wide text-[#61705f]">GOOGLE 登入</p>
-						<div id="google-signin-button" class="flex justify-center"></div>
-						{#if !googleReady}
-							<p class="text-center text-xs text-[#9a918a]">Google 按鈕載入中…</p>
-						{/if}
-					</div>
-					<div class="flex items-center gap-3 text-xs text-[#9a918a]">
-						<div class="h-px flex-1 bg-[#eee7df]"></div>
-						<span>或</span>
-						<div class="h-px flex-1 bg-[#eee7df]"></div>
-					</div>
-				{:else}
-					<p class="rounded-xl bg-[#f9f6f3] p-3 text-sm text-[#5c554f]">
-						Google 登入尚未設定完成，請先使用手機號碼預約。
-					</p>
-				{/if}
-
-				<form
-					class="space-y-3"
-					on:submit|preventDefault={submitGuestAuth}
-				>
-					<p class="text-xs font-medium tracking-wide text-[#61705f]">手機號碼預約</p>
+				<form class="space-y-3" on:submit|preventDefault={submitGuestAuth}>
+					<p class="text-xs font-medium tracking-wide text-[#61705f]">訪客預約</p>
+					<input
+						type="text"
+						autocomplete="name"
+						placeholder="稱呼／姓名（必填）"
+						bind:value={guestName}
+						class="w-full rounded-xl border border-[#e6ddd3] px-4 py-3 text-sm"
+						required
+					/>
 					<input
 						type="tel"
 						inputmode="numeric"
@@ -652,13 +558,6 @@
 						bind:value={guestPhone}
 						class="w-full rounded-xl border border-[#e6ddd3] px-4 py-3 text-sm"
 						required
-					/>
-					<input
-						type="text"
-						autocomplete="name"
-						placeholder="稱呼（選填）"
-						bind:value={guestName}
-						class="w-full rounded-xl border border-[#e6ddd3] px-4 py-3 text-sm"
 					/>
 					{#if data.turnstileEnabled && data.turnstileSiteKey}
 						<div id="turnstile-guest" class="flex justify-center"></div>
@@ -671,7 +570,7 @@
 						{guestSubmitting ? '驗證中…' : '繼續預約'}
 					</button>
 					<p class="text-xs leading-relaxed text-[#9a918a]">
-						訪客預約僅保存在這個瀏覽器，可查看與取消本次預約；換裝置請改用 Google 登入。
+						成功後請保存專屬管理連結。也可加入官方 LINE，之後用圖文選單更方便。
 					</p>
 				</form>
 			</div>
@@ -692,7 +591,6 @@
 			<form method="POST" use:enhance={handleEnhance} class="space-y-8">
 				<input type="hidden" name="authProvider" value={authProviderValue} />
 				<input type="hidden" name="accessToken" value={accessToken} />
-				<input type="hidden" name="googleIdToken" value={googleIdToken} />
 				<input type="hidden" name="guestPhone" value={guestPhone || webProfile?.phone || ''} />
 				<input type="hidden" name="guestName" value={guestName || webProfile?.displayName || ''} />
 				<input type="hidden" name="turnstileToken" value={turnstileToken} />

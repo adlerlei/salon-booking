@@ -9,6 +9,8 @@
 	const dateTimeStr = $page.url.searchParams.get('date') || ''; // e.g. "2026-03-15T14:00"
 	const customerName = $page.url.searchParams.get('name') || '';
 	const duration = parseInt($page.url.searchParams.get('duration') || '60');
+	const manageToken = $page.url.searchParams.get('token') || '';
+	const manageUrl = manageToken ? `/manage/${manageToken}` : '';
 
 	// 解析日期與時間
 	const parseBookingInfo = () => {
@@ -169,16 +171,24 @@
 					溫馨提醒：若超過預約時間 10 分鐘，預約將不予保留。如需更改請聯繫沙龍。
 				</p>
 
-				<!-- 主按鈕：查看我的預約 -->
-				<a 
-					href="/my-bookings"
-					class="flex w-full items-center justify-center gap-2 rounded-2xl bg-[#8F9E91] px-6 py-4 font-semibold text-white shadow-md shadow-[#8F9E91]/25 transition-all duration-200 active:scale-[0.97] hover:bg-[#7A8A7C]"
-				>
-					<svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-						<path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-					</svg>
-					查看我的預約
-				</a>
+				{#if manageUrl}
+					<a
+						href={manageUrl}
+						class="flex w-full items-center justify-center gap-2 rounded-2xl bg-[#8F9E91] px-6 py-4 font-semibold text-white shadow-md shadow-[#8F9E91]/25 transition-all duration-200 active:scale-[0.97] hover:bg-[#7A8A7C]"
+					>
+						管理／取消這筆預約
+					</a>
+					<p class="text-center text-xs leading-relaxed text-[#8a8179]">
+						請收藏上方專屬連結，之後可用來查看或取消。也可加入官方 LINE，之後用圖文選單更方便。
+					</p>
+				{:else}
+					<a
+						href="/my-bookings"
+						class="flex w-full items-center justify-center gap-2 rounded-2xl bg-[#8F9E91] px-6 py-4 font-semibold text-white shadow-md shadow-[#8F9E91]/25 transition-all duration-200 active:scale-[0.97] hover:bg-[#7A8A7C]"
+					>
+						查看我的預約
+					</a>
+				{/if}
 			</div>
 		{/if}
 	</div>

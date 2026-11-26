@@ -27,7 +27,7 @@
 				剪、染、燙、護<br />一站完成的日常質感
 			</h1>
 			<p class="mt-5 max-w-lg text-base leading-relaxed text-[#5c554f]">
-				熟客可從官方 LINE 圖文選單預約；新朋友也能直接在網頁用 Google 登入或手機號碼完成預約。
+				熟客可從官方 LINE 圖文選單預約；新朋友也能在網頁填寫姓名與手機完成預約，不必先加入 LINE。
 			</p>
 			<div class="mt-8 flex flex-wrap gap-3">
 				<a

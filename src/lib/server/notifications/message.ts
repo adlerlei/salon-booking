@@ -11,7 +11,6 @@ export type BookingNotificationPayload = {
 
 const SOURCE_LABEL: Record<BookingSource, string> = {
 	line: 'LINE',
-	google: 'Google',
 	guest: '網頁訪客'
 };
 
