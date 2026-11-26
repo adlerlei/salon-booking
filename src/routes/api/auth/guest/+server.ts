@@ -41,7 +41,13 @@ export async function POST({ request, cookies, platform, url }) {
 			name,
 			phone
 		});
-	} catch {
-		return json({ success: false, message: '訪客登入失敗，請稍後再試' }, { status: 500 });
+	} catch (err) {
+		console.error('Guest auth failed:', err);
+		const detail = err instanceof Error ? err.message : '';
+		const message =
+			detail.includes('LINE_SESSION_SECRET') || detail.includes('not configured')
+				? '系統尚未完成登入設定，請稍後再試'
+				: '訪客登入失敗，請稍後再試';
+		return json({ success: false, message }, { status: 500 });
 	}
 }
