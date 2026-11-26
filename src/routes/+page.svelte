@@ -1038,6 +1038,10 @@
 							{/each}
 						</div>
 
+						<p class="rounded-xl bg-[#f9f6f3] px-4 py-3 text-sm leading-relaxed text-[#5c554f]">
+							若超過預約時間 10 分鐘，預約將不予保留。
+						</p>
+
 						<div
 							class="fixed right-4 bottom-4 left-4 z-20 mx-auto mt-12 flex max-w-lg items-center justify-between rounded-2xl border border-gray-100 bg-white p-4 shadow-sm"
 						>

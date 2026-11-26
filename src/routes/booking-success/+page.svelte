@@ -165,6 +165,10 @@
 		<!-- 按鈕與提示區域 -->
 		{#if showButtons}
 			<div class="flex flex-col gap-3" in:fly={{ y: 16, duration: 350, easing: cubicOut }}>
+				<p class="rounded-2xl border border-[#e6ddd3] bg-white px-4 py-3 text-center text-sm leading-relaxed text-[#5c554f]">
+					溫馨提醒：若超過預約時間 10 分鐘，預約將不予保留。如需更改請聯繫沙龍。
+				</p>
+
 				<!-- 主按鈕：查看我的預約 -->
 				<a 
 					href="/my-bookings"

@@ -1,6 +1,6 @@
 import { getDbErrorMessage, initDb } from '$lib/server/db';
 import { appointments, closures } from '$lib/server/db/schema';
-import { and, eq, gte, lt } from 'drizzle-orm';
+import { and, desc, eq, gte, lt } from 'drizzle-orm';
 import { verifyLineAccessToken } from '$lib/server/auth/line';
 import { isGoogleAuthConfigured, verifyGoogleIdToken } from '$lib/server/auth/google';
 import {
@@ -299,6 +299,67 @@ export const actions = {
 
 			if (hasConflict) {
 				return { success: false, message: '這個時段已經被預約，請重新選擇' };
+			}
+
+			// 短時間重複提交：同一身份、同一時段、同一服務內容
+			const recentDuplicates = await db
+				.select({
+					id: appointments.id,
+					createdAt: appointments.createdAt
+				})
+				.from(appointments)
+				.where(
+					and(
+						eq(appointments.authProvider, identity.provider),
+						eq(appointments.authSubject, identity.subject),
+						eq(appointments.appointmentDate, appointmentDate),
+						eq(appointments.serviceType, serviceType),
+						eq(appointments.status, 'confirmed')
+					)
+				)
+				.orderBy(desc(appointments.createdAt))
+				.limit(1);
+
+			const latestDuplicate = recentDuplicates[0];
+			if (latestDuplicate?.createdAt) {
+				const ageMs = Date.now() - new Date(latestDuplicate.createdAt).getTime();
+				if (ageMs >= 0 && ageMs < 2 * 60 * 1000) {
+					return {
+						success: false,
+						message: '相同預約剛送出成功，請勿重複提交'
+					};
+				}
+			}
+
+			// 寫入前再檢查一次時段衝突，降低併發雙寫機率
+			const recheckAppointments = await db
+				.select({
+					appointmentDate: appointments.appointmentDate,
+					durationMinutes: appointments.durationMinutes
+				})
+				.from(appointments)
+				.where(
+					and(
+						eq(appointments.status, 'confirmed'),
+						gte(appointments.appointmentDate, `${selectedDate}T`),
+						lt(appointments.appointmentDate, `${selectedDate}T\uffff`)
+					)
+				);
+
+			const stillConflict = recheckAppointments.some(
+				(booking: { appointmentDate: string; durationMinutes: number }) => {
+					if (!booking.appointmentDate.startsWith(selectedDate)) return false;
+					const bookingTime = booking.appointmentDate.split('T')[1];
+					const bookingStartMinutes = timeToMinutes(bookingTime);
+					const bookingEndMinutes = bookingStartMinutes + booking.durationMinutes;
+					return (
+						selectedStartMinutes < bookingEndMinutes && selectedEndMinutes > bookingStartMinutes
+					);
+				}
+			);
+
+			if (stillConflict) {
+				return { success: false, message: '這個時段剛剛被預約，請重新選擇' };
 			}
 
 			const customerName =
