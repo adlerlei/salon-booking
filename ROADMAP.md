@@ -74,7 +74,7 @@
 - [x] 預約頁：網頁路徑 Google 登入為主，訪客備援（手機＋名稱）
 - [x] LINE LIFF 路徑維持自動登入，行為與現況相容
 - [x] 個人預約查詢／取消：依各自身份；訪客僅同瀏覽器 Session
-- [ ] 訪客防濫用：Turnstile；同一手機已有未來預約則限制再約（手機重複限制已做；Turnstile 待接）
+- [x] 訪客防濫用：Turnstile 可選驗證＋同一手機未來預約限制（未設金鑰時跳過驗證）
 - [x] 伺服器防撞時段＋短時間重複提交拒收（寫入前複檢＋2 分鐘同內容拒收；非 DB 級原子鎖）
 - [x] 預約頁／成功頁加上「逾時 10 分鐘不予保留」文案
 
@@ -89,17 +89,17 @@
 
 ### C. 官網與 Google 商家
 
-- [ ] 同站品牌首頁（特色、營業時間、交通、「立即預約」CTA）
-- [ ] 服務／價目、FAQ 基礎頁（讀同一份服務資料）
-- [ ] 既有公告／專欄整合進官網資訊架構
+- [x] 同站品牌首頁 `/home`（暫不改動 `/`，以保護 LINE 圖文選單）
+- [x] 服務／FAQ 基礎頁（`/services`、`/faq`；服務讀同一份資料）
+- [x] 既有公告／專欄從首頁連回
 - [ ] SEO 基礎：Title／Description／OG、`sitemap`、`robots`、JSON-LD（HairSalon／LocalBusiness）
 - [ ] `llms.txt`（AI 搜尋摘要）
-- [ ] Google 商家填入官網與預約連結（外部設定，非程式）
+- [ ] Google 商家填入官網與預約連結（外部設定，非程式；官網暫用 `/home`）
 
 ### D. 資料與設定前置
 
-- [ ] 服務項目抽成單一資料源（名稱、時長；價目可先靜態）
-- [ ] 申請／設定：Google OAuth、Turnstile、Telegram Bot、Web Push VAPID
+- [x] 服務項目抽成單一資料源（`src/lib/services.ts`；價目可後補）
+- [ ] 申請／設定：Google OAuth、Turnstile、Telegram Bot、Web Push VAPID → `SETUP-TODO.md`
 - [ ] （選配）自訂網域
 
 ### E. 改版切換檢查

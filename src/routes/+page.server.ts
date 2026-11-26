@@ -18,21 +18,8 @@ import { countFutureConfirmedByPhone } from '$lib/server/bookings';
 import { notifyAdminsAboutNewBooking } from '$lib/server/notifications';
 import { listActiveAnnouncements } from '$lib/server/news';
 import { toTaipeiNowString } from '$lib/server/time';
-
-const serviceDurations: Record<string, number> = {
-	男生單剪: 20,
-	女生單剪: 30,
-	男生洗剪: 30,
-	女生洗剪: 50,
-	男生染髮: 90,
-	女生染髮: 120,
-	男生燙髮: 90,
-	女生燙髮: 180,
-	'洗髮+頭皮保養': 40,
-	'洗剪+頭皮保養': 60,
-	'護髮+洗髮': 30,
-	'護髮+剪髮+洗髮': 60
-};
+import { serviceDurations } from '$lib/services';
+import { getTurnstileSiteKey, isTurnstileConfigured, verifyTurnstileToken } from '$lib/server/turnstile';
 
 const OPEN_MINUTES = 11 * 60;
 const LATEST_BOOKING_MINUTES = 20 * 60 + 30;
@@ -81,7 +68,9 @@ export const load = async ({ platform, locals }) => {
 			loadError: '',
 			auth: locals.auth,
 			googleEnabled: isGoogleAuthConfigured(platform?.env),
-			googleClientId
+			googleClientId,
+			turnstileSiteKey: getTurnstileSiteKey(platform?.env),
+			turnstileEnabled: isTurnstileConfigured(platform?.env)
 		};
 	} catch (err) {
 		console.error('Failed to load booking page data:', err);
@@ -92,7 +81,9 @@ export const load = async ({ platform, locals }) => {
 			loadError: getDbErrorMessage(err, '系統資料載入失敗，請稍後再試。'),
 			auth: locals.auth,
 			googleEnabled: isGoogleAuthConfigured(platform?.env),
-			googleClientId
+			googleClientId,
+			turnstileSiteKey: getTurnstileSiteKey(platform?.env),
+			turnstileEnabled: isTurnstileConfigured(platform?.env)
 		};
 	}
 };
@@ -224,13 +215,24 @@ export const actions = {
 				return { success: false, message: '不能預約已經過去的時段' };
 			}
 
-			if (identity.provider === 'guest' && identity.phone) {
-				const existingCount = await countFutureConfirmedByPhone(db, identity.phone);
-				if (existingCount > 0) {
-					return {
-						success: false,
-						message: '此手機號碼已有即將到來的預約，如需更改請先取消原預約'
-					};
+			if (identity.provider === 'guest') {
+				const turnstile = await verifyTurnstileToken(
+					(data.get('turnstileToken') as string) || '',
+					platform?.env,
+					request.headers.get('cf-connecting-ip')
+				);
+				if (!turnstile.ok) {
+					return { success: false, message: turnstile.message || '防機器人驗證失敗' };
+				}
+
+				if (identity.phone) {
+					const existingCount = await countFutureConfirmedByPhone(db, identity.phone);
+					if (existingCount > 0) {
+						return {
+							success: false,
+							message: '此手機號碼已有即將到來的預約，如需更改請先取消原預約'
+						};
+					}
 				}
 			}
 

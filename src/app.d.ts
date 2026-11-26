@@ -8,6 +8,8 @@ declare global {
 		LINE_NOTIFICATION_ADMIN_URL?: string;
 		GOOGLE_CLIENT_ID?: string;
 		TURNSTILE_SECRET_KEY?: string;
+		PUBLIC_TURNSTILE_SITE_KEY?: string;
+		PUBLIC_GOOGLE_CLIENT_ID?: string;
 		TELEGRAM_BOT_TOKEN?: string;
 		TELEGRAM_CHAT_ID?: string;
 		WEB_PUSH_VAPID_PUBLIC_KEY?: string;

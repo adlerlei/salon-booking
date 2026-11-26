@@ -4,6 +4,7 @@
 	import { enhance } from '$app/forms';
 	import { goto } from '$app/navigation';
 	import { fade, slide } from 'svelte/transition';
+	import { salonServices } from '$lib/services';
 	import type { PageData } from './$types';
 
 	export let data: PageData;
@@ -146,10 +147,44 @@
 		}
 	};
 
+	const loadTurnstile = async (siteKey: string) => {
+		if (!siteKey || typeof window === 'undefined') return;
+		await new Promise<void>((resolve, reject) => {
+			if (document.getElementById('cf-turnstile-script')) {
+				resolve();
+				return;
+			}
+			const script = document.createElement('script');
+			script.id = 'cf-turnstile-script';
+			script.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
+			script.async = true;
+			script.onload = () => resolve();
+			script.onerror = () => reject(new Error('Turnstile 載入失敗'));
+			document.head.appendChild(script);
+		});
+
+		const turnstile = (window as any).turnstile;
+		const mount = document.getElementById('turnstile-guest');
+		if (!turnstile || !mount) return;
+		mount.innerHTML = '';
+		turnstile.render(mount, {
+			sitekey: siteKey,
+			callback: (token: string) => {
+				turnstileToken = token;
+			},
+			'expired-callback': () => {
+				turnstileToken = '';
+			}
+		});
+	};
+
 	const submitGuestAuth = async () => {
 		guestSubmitting = true;
 		error = '';
 		try {
+			if (data.turnstileEnabled && !turnstileToken) {
+				throw new Error('請先完成防機器人驗證');
+			}
 			const res = await fetch('/api/auth/guest', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
@@ -224,6 +259,9 @@
 			if (!webProfile && data.googleEnabled && data.googleClientId) {
 				await loadGoogleButton(data.googleClientId);
 			}
+			if (!webProfile && data.turnstileEnabled && data.turnstileSiteKey) {
+				await loadTurnstile(data.turnstileSiteKey);
+			}
 		} catch (err: any) {
 			authMode = 'web';
 			if (!webProfile) {
@@ -237,24 +275,18 @@
 					error = googleErr.message || error;
 				}
 			}
+			if (data.turnstileEnabled && data.turnstileSiteKey) {
+				try {
+					await loadTurnstile(data.turnstileSiteKey);
+				} catch {
+					// ignore; server will still enforce when configured
+				}
+			}
 		}
 	});
 
-	// Services
-	const services = [
-		{ name: '男生單剪', duration: 20, desc: '約 20 分鐘' },
-		{ name: '女生單剪', duration: 30, desc: '約 30 分鐘' },
-		{ name: '男生洗剪', duration: 30, desc: '約 30 分鐘' },
-		{ name: '女生洗剪', duration: 50, desc: '約 50 分鐘' },
-		{ name: '男生染髮', duration: 90, desc: '約 1.5 小時' },
-		{ name: '女生染髮', duration: 120, desc: '約 2 小時' },
-		{ name: '男生燙髮', duration: 90, desc: '約 1.5 小時' },
-		{ name: '女生燙髮', duration: 180, desc: '約 3 小時' },
-		{ name: '洗髮+頭皮保養', duration: 40, desc: '約 40 分鐘' },
-		{ name: '洗剪+頭皮保養', duration: 60, desc: '約 1 小時' },
-		{ name: '護髮+洗髮', duration: 30, desc: '約 30 分鐘' },
-		{ name: '護髮+剪髮+洗髮', duration: 60, desc: '約 1 小時' }
-	];
+	const services = salonServices;
+	let turnstileToken = '';
 
 	// Party size and per-person service selection
 	let partySize = 1;
@@ -628,6 +660,9 @@
 						bind:value={guestName}
 						class="w-full rounded-xl border border-[#e6ddd3] px-4 py-3 text-sm"
 					/>
+					{#if data.turnstileEnabled && data.turnstileSiteKey}
+						<div id="turnstile-guest" class="flex justify-center"></div>
+					{/if}
 					<button
 						type="submit"
 						disabled={guestSubmitting}
@@ -660,6 +695,7 @@
 				<input type="hidden" name="googleIdToken" value={googleIdToken} />
 				<input type="hidden" name="guestPhone" value={guestPhone || webProfile?.phone || ''} />
 				<input type="hidden" name="guestName" value={guestName || webProfile?.displayName || ''} />
+				<input type="hidden" name="turnstileToken" value={turnstileToken} />
 				<input type="hidden" name="partySize" value={partySize} />
 				<input type="hidden" name="servicesJson" value={servicesJsonValue} />
 				<input type="hidden" name="appointmentDate" value="{selectedDate}T{selectedTime}" />
