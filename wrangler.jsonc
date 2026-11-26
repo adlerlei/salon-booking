@@ -8,7 +8,7 @@
 		{
 			"binding": "salon_booking_db",
 			"database_name": "salon-booking-db",
-			"database_id": "696ed09e-40e2-40de-a5c5-53bfe7193872",
+			"database_id": "a4b879cb-df4d-423a-b650-9fb565fcf0f5",
 			"migrations_dir": "drizzle"
 		}
 	]

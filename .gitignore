@@ -26,3 +26,6 @@ vite.config.ts.timestamp-*
 /worker-configuration.d.ts
 # SQLite
 *.db
+
+# Cloudflare account migration backups (may contain customer data)
+/backups/

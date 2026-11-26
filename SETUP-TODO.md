@@ -43,8 +43,8 @@ npx wrangler d1 migrations apply salon-booking-db --remote
 
 ### 5. Google 商家檔案連結
 
-- 網站：`https://salon-booking-a01.pages.dev/home`（暫用）
-- 預約：`https://salon-booking-a01.pages.dev/`（與 LINE 同一套）
+- 網站：`https://salon-booking-1uu.pages.dev/home`（已遷至 jianyinlyu 帳號；可再綁自訂網域）
+- 預約：`https://salon-booking-1uu.pages.dev/`（與 LINE 同一套；切換前需改 LIFF／圖文選單網址）
 
 ### 6. LINE 通知
 
