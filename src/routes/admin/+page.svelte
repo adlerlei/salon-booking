@@ -103,6 +103,11 @@
 	let closureError = $state('');
 	let pushStatus = $state('');
 	let pushBusy = $state(false);
+	let pushHint = $state('');
+	let canUseWebPush = $state(false);
+	let isStandalonePwa = $state(false);
+	let pushEnabled = $state(false);
+	let pushChecked = $state(false);
 
 	const loadClosures = async () => {
 		try {
@@ -512,6 +517,7 @@
 
 	onMount(async () => {
 		isMounted = true;
+		detectPushEnvironment();
 
 		try {
 			const liffModule = await import('@line/liff');
@@ -608,6 +614,7 @@
 		if (authState === 'authorized') {
 			startPolling();
 			loadClosures();
+			void syncWebPushState({ autoEnable: true });
 			loadContent();
 			return;
 		}
@@ -632,22 +639,80 @@
 		return Uint8Array.from([...rawData].map((char) => char.charCodeAt(0)));
 	};
 
-	const enableWebPush = async () => {
-		pushBusy = true;
-		pushStatus = '';
-		try {
-			if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
-				throw new Error('此裝置不支援 Web Push');
-			}
+	const detectPushEnvironment = () => {
+		const standalone =
+			window.matchMedia('(display-mode: standalone)').matches ||
+			('standalone' in navigator && Boolean((navigator as Navigator & { standalone?: boolean }).standalone));
+		const supported = 'serviceWorker' in navigator && 'PushManager' in window;
+		const isIos = /iPad|iPhone|iPod/.test(navigator.userAgent);
 
-			const permission = await Notification.requestPermission();
+		isStandalonePwa = standalone;
+		canUseWebPush = supported;
+
+		const isAndroid = /Android/i.test(navigator.userAgent);
+
+		if (supported) {
+			if (isAndroid) {
+				pushHint = standalone
+					? '可直接開啟推播；LINE 通知（有額度時）會並行發送。'
+					: 'Android Chrome 可直接點「開啟手機推播」。也可選單 → 加入主畫面／安裝應用程式，之後從圖示進入更方便。';
+				return;
+			}
+			pushHint = standalone
+				? '可直接開啟推播；LINE 通知（有額度時）會並行發送。'
+				: '建議加入主畫面後再開啟，通知較穩定。';
+			return;
+		}
+
+		if (isIos) {
+			pushHint = standalone
+				? '請確認 iOS 16.4 以上，並在系統設定允許此 App 通知。'
+				: 'iPhone 上 Chrome／Safari 分頁都無法推播。請改用 Safari 打開本頁 → 分享 → 加入主畫面，再點桌面「Jo預約管理」進入後台開啟推播。';
+			return;
+		}
+
+		pushHint = '此瀏覽器不支援 Web Push。Android 請用 Chrome 打開後台再開啟推播。';
+	};
+
+	const savePushSubscription = async (subscription: PushSubscription) => {
+		const saveRes = await fetch('/api/admin/push/subscribe', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify(subscription.toJSON())
+		});
+		const saveJson = (await saveRes.json()) as { success?: boolean; message?: string };
+		if (!saveRes.ok || !saveJson.success) {
+			throw new Error(saveJson.message || '儲存推播訂閱失敗');
+		}
+	};
+
+	const ensurePushSubscription = async (options?: { requestPermission?: boolean }) => {
+		detectPushEnvironment();
+		if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+			const isIos = /iPad|iPhone|iPod/.test(navigator.userAgent);
+			throw new Error(
+				isIos
+					? 'iPhone 需先「加入主畫面」，再從桌面圖示開啟後台才能推播'
+					: '此裝置不支援 Web Push'
+			);
+		}
+
+		let permission = Notification.permission;
+		if (permission !== 'granted') {
+			if (!options?.requestPermission) {
+				return false;
+			}
+			permission = await Notification.requestPermission();
 			if (permission !== 'granted') {
 				throw new Error('尚未允許通知權限');
 			}
+		}
 
-			const registration = await navigator.serviceWorker.register('/service-worker.js');
-			await navigator.serviceWorker.ready;
+		const registration = await navigator.serviceWorker.register('/service-worker.js');
+		await navigator.serviceWorker.ready;
 
+		let subscription = await registration.pushManager.getSubscription();
+		if (!subscription) {
 			const keyRes = await fetch('/api/admin/push/vapid-key', { cache: 'no-store' });
 			const keyJson = (await keyRes.json()) as {
 				configured?: boolean;
@@ -658,24 +723,59 @@
 				throw new Error(keyJson.message || '尚未設定 VAPID 金鑰');
 			}
 
-			const subscription = await registration.pushManager.subscribe({
+			subscription = await registration.pushManager.subscribe({
 				userVisibleOnly: true,
 				applicationServerKey: urlBase64ToUint8Array(keyJson.publicKey)
 			});
+		}
 
-			const saveRes = await fetch('/api/admin/push/subscribe', {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify(subscription.toJSON())
-			});
-			const saveJson = (await saveRes.json()) as { success?: boolean; message?: string };
-			if (!saveRes.ok || !saveJson.success) {
-				throw new Error(saveJson.message || '儲存推播訂閱失敗');
+		await savePushSubscription(subscription);
+		pushEnabled = true;
+		return true;
+	};
+
+	const syncWebPushState = async (options?: { autoEnable?: boolean }) => {
+		pushChecked = false;
+		try {
+			detectPushEnvironment();
+			if (!canUseWebPush) {
+				pushEnabled = false;
+				return;
 			}
 
+			const registration = await navigator.serviceWorker.register('/service-worker.js');
+			await navigator.serviceWorker.ready;
+			const existing = await registration.pushManager.getSubscription();
+
+			if (existing) {
+				await savePushSubscription(existing);
+				pushEnabled = true;
+				return;
+			}
+
+			if (options?.autoEnable && Notification.permission === 'granted') {
+				await ensurePushSubscription({ requestPermission: false });
+				return;
+			}
+
+			pushEnabled = false;
+		} catch (err) {
+			console.warn('syncWebPushState failed', err);
+			pushEnabled = false;
+		} finally {
+			pushChecked = true;
+		}
+	};
+
+	const enableWebPush = async () => {
+		pushBusy = true;
+		pushStatus = '';
+		try {
+			await ensurePushSubscription({ requestPermission: true });
 			pushStatus = '已開啟手機推播';
 		} catch (err: any) {
 			pushStatus = err?.message || '開啟推播失敗';
+			pushEnabled = false;
 		} finally {
 			pushBusy = false;
 		}
@@ -902,23 +1002,34 @@
 					</div>
 				{/if}
 
-				<div
-					class="mt-4 flex flex-col gap-2 rounded-[22px] border border-[#eadfd4] bg-white/70 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
-				>
-					<div class="text-sm text-[#5f5750]">
-						<p class="font-medium">新預約通知</p>
-						<p class="mt-0.5 text-xs text-[#8a8179]">
-							{#if data.webPushConfigured}
-								可加入主畫面並開啟推播；LINE 通知（有額度時）會並行發送。
-							{:else}
-								Web Push 金鑰尚未設定（見 SETUP-TODO.md）。設定後即可在鎖屏收到新預約。
+				{#if data.webPushConfigured && (!pushChecked || !pushEnabled)}
+					<div
+						class="mt-4 flex flex-col gap-2 rounded-[22px] border border-[#eadfd4] bg-white/70 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+					>
+						<div class="text-sm text-[#5f5750]">
+							<p class="font-medium">新預約通知</p>
+							<p class="mt-0.5 text-xs text-[#8a8179]">
+								{#if pushHint}
+									{pushHint}
+								{:else}
+									可加入主畫面並開啟推播；LINE 通知（有額度時）會並行發送。
+								{/if}
+							</p>
+							{#if pushStatus}
+								<p
+									class="mt-1 text-xs {pushStatus.startsWith('已')
+										? 'text-[#6b7d6d]'
+										: 'text-[#8f5f5f]'}"
+								>
+									{pushStatus}
+								</p>
 							{/if}
-						</p>
-						{#if pushStatus}
-							<p class="mt-1 text-xs text-[#6b7d6d]">{pushStatus}</p>
-						{/if}
-					</div>
-					{#if data.webPushConfigured}
+							{#if !canUseWebPush && !isStandalonePwa}
+								<p class="mt-1 text-[11px] leading-relaxed text-[#8a8179]">
+									網址：https://salon-booking-1uu.pages.dev/admin
+								</p>
+							{/if}
+						</div>
 						<button
 							type="button"
 							class="shrink-0 rounded-full bg-[#2C302E] px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
@@ -927,8 +1038,8 @@
 						>
 							{pushBusy ? '開啟中…' : '開啟手機推播'}
 						</button>
-					{/if}
-				</div>
+					</div>
+				{/if}
 			</section>
 
 			<!-- Agenda Tab -->
@@ -1080,6 +1191,7 @@
 							統計資料整理中
 						</div>
 					{/if}
+
 				</section>
 			{:else if activeTab === 'closures'}
 				<section

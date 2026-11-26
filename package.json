@@ -1,7 +1,7 @@
 {
 	"name": "salon-booking",
 	"private": true,
-	"version": "0.2.6",
+	"version": "0.2.8",
 	"type": "module",
 	"scripts": {
 		"dev": "vite dev",
@@ -29,7 +29,6 @@
 		"@tailwindcss/vite": "^4.1.18",
 		"@types/better-sqlite3": "^7.6.13",
 		"@types/node": "^22",
-		"@types/web-push": "^3.6.4",
 		"@vitejs/plugin-basic-ssl": "^2.1.4",
 		"drizzle-kit": "^0.31.8",
 		"drizzle-orm": "^0.45.1",
@@ -49,8 +48,8 @@
 		"wrangler": "^4.63.0"
 	},
 	"dependencies": {
+		"@block65/webcrypto-web-push": "^2.0.0",
 		"@line/liff": "^2.32.0",
-		"better-sqlite3": "^12.6.2",
-		"web-push": "^4.0.0"
+		"better-sqlite3": "^12.6.2"
 	}
 }

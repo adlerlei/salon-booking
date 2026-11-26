@@ -2,23 +2,25 @@
 	import { onMount } from 'svelte';
 	import { fade, slide, scale } from 'svelte/transition';
 	import { resolve } from '$app/paths';
+	import SiteHeader from '$lib/components/SiteHeader.svelte';
 	import type { PageData } from './$types';
 
-	export let data: PageData;
+	let { data }: { data: PageData } = $props();
 
-	let profile: any = null;
-	let accessToken = '';
-	let error = '';
-	let bookings: any[] = [];
-	let loading = true;
-	let authMode: 'loading' | 'line' | 'web' = 'loading';
+	let profile = $state<{ displayName?: string } | null>(null);
+	let accessToken = $state('');
+	let error = $state('');
+	let bookings = $state<any[]>([]);
+	let loading = $state(true);
+	let authMode = $state<'loading' | 'line' | 'web'>('loading');
 
-	let cancellingId: string | null = null;
-	let showConfirmModal = false;
-	let appointmentToCancel: any = null;
+	let cancellingId = $state<string | null>(null);
+	let showConfirmModal = $state(false);
+	let appointmentToCancel = $state<any>(null);
+	let cancelNotice = $state('');
 
-	$: displayName = profile?.displayName || data.auth?.name || '';
-	$: isAuthed = Boolean(profile || (data.auth?.provider === 'line'));
+	const displayName = $derived(profile?.displayName || data.auth?.name || '');
+	const isAuthed = $derived(Boolean(profile || data.auth?.provider === 'line'));
 
 	const syncLineSession = async () => {
 		if (!accessToken) {
@@ -41,7 +43,7 @@
 			const res = await fetch('/api/bookings');
 			const json = (await res.json()) as { bookings: any[] };
 			bookings = json.bookings || [];
-		} catch (err: any) {
+		} catch (err) {
 			console.error('Failed to fetch bookings:', err);
 		} finally {
 			loading = false;
@@ -83,23 +85,28 @@
 
 	const cancelBooking = async (appointmentId: string) => {
 		cancellingId = appointmentId;
+		cancelNotice = '';
 		try {
 			const res = await fetch('/api/bookings', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ appointmentId })
 			});
-			const result = (await res.json()) as { success: boolean };
-			if (result.success) {
-				bookings = bookings.map((b) =>
-					b.id === appointmentId ? { ...b, status: 'cancelled' } : b
-				);
+			const result = (await res.json()) as { success: boolean; message?: string };
+			if (!res.ok || !result.success) {
+				throw new Error(result.message || '取消失敗，請稍後再試');
 			}
+			bookings = bookings.map((b) =>
+				b.id === appointmentId ? { ...b, status: 'cancelled' } : b
+			);
+			cancelNotice = '預約已取消，時段已釋出。';
 		} catch (err: any) {
 			console.error('Failed to cancel booking:', err);
+			cancelNotice = err?.message || '取消失敗，請稍後再試';
 		} finally {
 			cancellingId = null;
-			closeConfirmModal();
+			showConfirmModal = false;
+			appointmentToCancel = null;
 		}
 	};
 
@@ -124,15 +131,17 @@
 		return appointmentTime < now;
 	};
 
-	const upcomingBookings = () =>
+	const upcomingBookings = $derived(
 		bookings
 			.filter((b) => !isPast(b.appointmentDate) && b.status === 'confirmed')
-			.sort((a, b) => a.appointmentDate.localeCompare(b.appointmentDate));
+			.sort((a, b) => a.appointmentDate.localeCompare(b.appointmentDate))
+	);
 
-	const pastBookings = () =>
+	const pastBookings = $derived(
 		bookings
 			.filter((b) => isPast(b.appointmentDate) || b.status === 'cancelled')
-			.sort((a, b) => b.appointmentDate.localeCompare(a.appointmentDate));
+			.sort((a, b) => b.appointmentDate.localeCompare(a.appointmentDate))
+	);
 
 	const openConfirmModal = (booking: any) => {
 		appointmentToCancel = booking;
@@ -140,6 +149,7 @@
 	};
 
 	const closeConfirmModal = () => {
+		if (cancellingId) return;
 		showConfirmModal = false;
 		appointmentToCancel = null;
 	};
@@ -149,10 +159,15 @@
 	<title>我的預約 | Jo造型髮藝</title>
 </svelte:head>
 
-<div class="min-h-screen bg-[#F9F8F6] pb-20 font-sans text-[#2C302E]">
-	<header class="sticky top-0 z-10 bg-white px-6 py-6 shadow-sm">
+<div class="min-h-screen bg-[#F9F8F6] pb-24 font-sans text-[#2C302E]">
+	<SiteHeader current="" />
+
+	<header class="border-b border-[#e6ddd3] bg-white px-6 py-5">
 		<div class="mx-auto flex max-w-lg items-center justify-between">
-			<h1 class="font-serif text-2xl font-semibold tracking-wide" style="font-family: 'Playfair Display', serif;">
+			<h1
+				class="font-serif text-2xl font-semibold tracking-wide"
+				style="font-family: 'Playfair Display', serif;"
+			>
 				我的預約
 			</h1>
 			{#if displayName}
@@ -188,21 +203,37 @@
 				</a>
 			</div>
 		{:else}
-			{#if upcomingBookings().length === 0 && pastBookings().length === 0}
-				<div class="rounded-2xl border border-dashed border-[#e6ddd3] bg-white p-10 text-center text-[#7f766f]">
+			{#if cancelNotice}
+				<div
+					class="mb-4 rounded-2xl border border-[#d9e4d8] bg-[#f3f7f2] px-4 py-3 text-sm text-[#4f6350]"
+					transition:fade
+				>
+					<p>{cancelNotice}</p>
+					<a href={resolve('/')} class="mt-2 inline-flex text-sm font-medium text-[#2C302E] underline">
+						重新預約
+					</a>
+				</div>
+			{/if}
+
+			{#if upcomingBookings.length === 0 && pastBookings.length === 0}
+				<div
+					class="rounded-2xl border border-dashed border-[#e6ddd3] bg-white p-10 text-center text-[#7f766f]"
+				>
 					目前沒有預約紀錄
 				</div>
 			{/if}
 
-			{#if upcomingBookings().length > 0}
+			{#if upcomingBookings.length > 0}
 				<section class="mb-8 space-y-3" transition:fade>
 					<h2 class="text-sm font-semibold tracking-wide text-[#61705f]">即將到來</h2>
-					{#each upcomingBookings() as booking (booking.id)}
+					{#each upcomingBookings as booking (booking.id)}
 						<div class="rounded-2xl border border-[#e6ddd3] bg-white p-4 shadow-sm" transition:slide>
 							<div class="flex items-start justify-between gap-3">
 								<div>
 									<h3 class="text-sm font-medium">{booking.serviceType}</h3>
-									<p class="mt-1 text-sm text-[#7f766f]">{formatDateTime(booking.appointmentDate)}</p>
+									<p class="mt-1 text-sm text-[#7f766f]">
+										{formatDateTime(booking.appointmentDate)}
+									</p>
 									{#if booking.partySize > 1}
 										<p class="mt-1 text-xs text-[#9a918a]">{booking.partySize} 人</p>
 									{/if}
@@ -210,7 +241,7 @@
 								<button
 									type="button"
 									class="rounded-lg border border-red-200 px-3 py-1.5 text-xs text-red-600"
-									on:click={() => openConfirmModal(booking)}
+									onclick={() => openConfirmModal(booking)}
 									disabled={cancellingId === booking.id}
 								>
 									取消
@@ -221,10 +252,10 @@
 				</section>
 			{/if}
 
-			{#if pastBookings().length > 0}
+			{#if pastBookings.length > 0}
 				<section class="space-y-3" transition:fade>
 					<h2 class="text-sm font-semibold tracking-wide text-[#61705f]">歷史／已取消</h2>
-					{#each pastBookings() as booking (booking.id)}
+					{#each pastBookings as booking (booking.id)}
 						<div class="rounded-2xl border border-[#eee7df] bg-[#fcfbfa] p-4" transition:slide>
 							<div class="flex items-start justify-between gap-3">
 								<div>
@@ -234,7 +265,9 @@
 									>
 										{booking.serviceType}
 									</h3>
-									<p class="mt-1 text-sm text-[#9a918a]">{formatDateTime(booking.appointmentDate)}</p>
+									<p class="mt-1 text-sm text-[#9a918a]">
+										{formatDateTime(booking.appointmentDate)}
+									</p>
 								</div>
 								{#if booking.status === 'cancelled'}
 									<span class="text-xs text-red-500">已取消</span>
@@ -244,6 +277,21 @@
 					{/each}
 				</section>
 			{/if}
+
+			<div class="mt-8 grid gap-3 sm:grid-cols-2">
+				<a
+					href={resolve('/')}
+					class="rounded-xl bg-[#2C302E] px-4 py-3 text-center text-sm font-medium text-white"
+				>
+					前往預約
+				</a>
+				<a
+					href={resolve('/home')}
+					class="rounded-xl border border-[#e6ddd3] bg-white px-4 py-3 text-center text-sm font-medium text-[#2C302E]"
+				>
+					回到官網首頁
+				</a>
+			</div>
 		{/if}
 	</main>
 </div>
@@ -252,15 +300,15 @@
 	<div
 		class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-6"
 		transition:fade
-		on:click={closeConfirmModal}
-		on:keydown={(e) => e.key === 'Escape' && closeConfirmModal()}
+		onclick={closeConfirmModal}
+		onkeydown={(e) => e.key === 'Escape' && closeConfirmModal()}
 		role="presentation"
 	>
 		<div
 			class="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl"
 			transition:scale
-			on:click|stopPropagation
-			on:keydown|stopPropagation
+			onclick={(e) => e.stopPropagation()}
+			onkeydown={(e) => e.stopPropagation()}
 			role="dialog"
 			aria-modal="true"
 			tabindex="-1"
@@ -274,14 +322,15 @@
 				<button
 					type="button"
 					class="flex-1 rounded-xl border border-[#e6ddd3] px-4 py-3 text-sm"
-					on:click={closeConfirmModal}
+					onclick={closeConfirmModal}
+					disabled={Boolean(cancellingId)}
 				>
 					返回
 				</button>
 				<button
 					type="button"
-					class="flex-1 rounded-xl bg-red-600 px-4 py-3 text-sm text-white"
-					on:click={() => cancelBooking(appointmentToCancel.id)}
+					class="flex-1 rounded-xl bg-red-600 px-4 py-3 text-sm text-white disabled:opacity-50"
+					onclick={() => cancelBooking(appointmentToCancel.id)}
 					disabled={cancellingId === appointmentToCancel.id}
 				>
 					{cancellingId === appointmentToCancel.id ? '取消中…' : '確認取消'}

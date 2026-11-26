@@ -1,3 +1,4 @@
+import { buildPushPayload } from '@block65/webcrypto-web-push';
 import { eq } from 'drizzle-orm';
 import { initDb } from '$lib/server/db';
 import { pushSubscriptions } from '$lib/server/db/schema';
@@ -93,19 +94,11 @@ export const notifyWebPushAboutNewBooking = async (
 		DEFAULT_ADMIN_DASHBOARD_URL;
 	const bodyText = buildBookingNotificationText(payload, adminUrl);
 
-	let webpush: typeof import('web-push');
-	try {
-		webpush = await import('web-push');
-	} catch (error) {
-		console.error('web-push module unavailable', error);
-		return { sent: false, reason: 'module_unavailable' as const, delivered: 0 };
-	}
-
-	webpush.setVapidDetails(
-		getEnv(platform?.env, 'WEB_PUSH_VAPID_SUBJECT'),
-		getEnv(platform?.env, 'WEB_PUSH_VAPID_PUBLIC_KEY'),
-		getEnv(platform?.env, 'WEB_PUSH_VAPID_PRIVATE_KEY')
-	);
+	const vapid = {
+		subject: getEnv(platform?.env, 'WEB_PUSH_VAPID_SUBJECT'),
+		publicKey: getEnv(platform?.env, 'WEB_PUSH_VAPID_PUBLIC_KEY'),
+		privateKey: getEnv(platform?.env, 'WEB_PUSH_VAPID_PRIVATE_KEY')
+	};
 
 	const notificationPayload = JSON.stringify({
 		title: 'Jo造型髮藝・新預約',
@@ -116,21 +109,38 @@ export const notifyWebPushAboutNewBooking = async (
 
 	let delivered = 0;
 	for (const row of subscriptions) {
+		const subscription = {
+			endpoint: row.endpoint,
+			expirationTime: null,
+			keys: { p256dh: row.p256dh, auth: row.auth }
+		};
+
 		try {
-			await webpush.sendNotification(
+			const requestInit = await buildPushPayload(
 				{
-					endpoint: row.endpoint,
-					keys: { p256dh: row.p256dh, auth: row.auth }
+					data: notificationPayload,
+					options: {
+						ttl: 60 * 60,
+						urgency: 'high'
+					}
 				},
-				notificationPayload
+				subscription,
+				vapid
 			);
-			delivered += 1;
-		} catch (error: any) {
-			const statusCode = error?.statusCode;
-			console.error('Web Push send failed', statusCode || error);
-			if (statusCode === 404 || statusCode === 410) {
+
+			const response = await fetch(row.endpoint, requestInit);
+			if (response.ok || response.status === 201) {
+				delivered += 1;
+				continue;
+			}
+
+			const responseText = await response.text().catch(() => '');
+			console.error('Web Push send failed', response.status, responseText);
+			if (response.status === 404 || response.status === 410) {
 				await deletePushSubscription(platform, row.endpoint);
 			}
+		} catch (error) {
+			console.error('Web Push send failed', error);
 		}
 	}
 

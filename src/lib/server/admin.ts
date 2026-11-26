@@ -153,6 +153,11 @@ export const listAdminBookings = async (
 	platform: Readonly<App.Platform> | undefined,
 	now = new Date()
 ) => {
+	const { purgeExpiredCancelledAppointments } = await import('$lib/server/bookings/purge');
+	await purgeExpiredCancelledAppointments(platform).catch((error) => {
+		console.error('Failed to purge expired cancelled appointments', error);
+	});
+
 	const db = initDb(platform);
 	const taipeiNow = toTaipeiWallDate(now);
 	const weekStart = startOfWeek(taipeiNow);
